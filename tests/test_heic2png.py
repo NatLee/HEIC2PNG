@@ -8,12 +8,10 @@ from pillow_heif import register_heif_opener
 
 from heic2png.heic2png import HEIC2PNG
 
-
 class TestHEIC2PNG(unittest.TestCase):
 
     __test_input_filename = './test.heic'
     __test_output_filename = './test.png'
-    register_heif_opener()
 
     def test_save(self):
 
@@ -26,6 +24,7 @@ class TestHEIC2PNG(unittest.TestCase):
     @pytest.fixture(autouse=True)
     def run_around_tests(self):
         # before
+        register_heif_opener()
         yield
         # after
         input_file = Path(self.__test_input_filename)

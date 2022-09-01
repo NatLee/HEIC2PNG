@@ -1,3 +1,3 @@
-__version__ = "0.9.0"
+__version__ = "0.9.5"
 
 from .heic2png import *
