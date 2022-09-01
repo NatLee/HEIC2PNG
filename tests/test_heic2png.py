@@ -1,4 +1,6 @@
+from genericpath import exists
 import unittest
+import pytest
 from pathlib import Path
 
 from PIL import Image
@@ -9,16 +11,26 @@ from heic2png.heic2png import HEIC2PNG
 
 class TestHEIC2PNG(unittest.TestCase):
 
-    __test_input_filename = 'test.heic'
-    __test_output_filename = 'test.png'
+    __test_input_filename = './test.heic'
+    __test_output_filename = './test.png'
+    register_heif_opener()
 
     def test_save(self):
-        register_heif_opener()
+
         img = Image.new('RGB', (30, 30), color = 'red')
         img.save(self.__test_input_filename)
         heic2png_obj = HEIC2PNG(self.__test_input_filename)
-        heic2png_obj.save()
-        self.assertEqual(Path(self.__test_output_filename).exists(), True)
+        heic2png_obj.save(output_image_file_path=self.__test_output_filename)
+        self.assertTrue(Path(self.__test_output_filename).exists())
+
+    @pytest.fixture(autouse=True)
+    def run_around_tests(self):
+        # before
+        yield
+        # after
+        Path(self.__test_input_filename).unlink(missing_ok=True)
+        Path(self.__test_output_filename).unlink(missing_ok=True)
+
 
 if __name__ == '__main__':
     unittest.main()

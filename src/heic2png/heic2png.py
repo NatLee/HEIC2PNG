@@ -7,7 +7,10 @@ class HEIC2PNG:
     def __init__(self, image_file_path:str):
         self.__opener = register_heif_opener()
         self.image_file_path = Path(image_file_path)
-        self.image = Image.open(image_file_path)
+        if self.image_file_path.suffix.lower() != '.heic':
+            raise ValueError
+        
+        self.image = Image.open(self.image_file_path)
 
     def save(self, output_image_file_path=None, extension='.png'):
         if output_image_file_path:
