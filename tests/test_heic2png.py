@@ -28,8 +28,12 @@ class TestHEIC2PNG(unittest.TestCase):
         # before
         yield
         # after
-        Path(self.__test_input_filename).unlink(missing_ok=True)
-        Path(self.__test_output_filename).unlink(missing_ok=True)
+        input_file = Path(self.__test_input_filename)
+        output_file = Path(self.__test_output_filename)
+        if input_file.exists():
+            input_file.unlink()
+        if output_file.exists():
+            output_file.unlink()
 
 
 if __name__ == '__main__':
