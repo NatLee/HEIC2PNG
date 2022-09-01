@@ -4,19 +4,18 @@ with open('README.md', 'r', encoding='utf-8') as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name='example_pypi_package',
-    author='Tom Chen',
-    author_email='tomchen.org@gmail.com',
-    description='Example PyPI (Python Package Index) Package',
-    keywords='example, pypi, package',
+    name='HEIC2PNG',
+    author='Nat Lee',
+    author_email='natlee.work@gmail.com',
+    description='Convert format of HEIC image to PNG by using Python.',
+    keywords='HEIC, PNG, converter, image',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url='https://github.com/tomchen/example_pypi_package',
+    url='https://github.com/natlee/HEIC2PNG',
     project_urls={
-        'Documentation': 'https://github.com/tomchen/example_pypi_package',
-        'Bug Reports':
-        'https://github.com/tomchen/example_pypi_package/issues',
-        'Source Code': 'https://github.com/tomchen/example_pypi_package',
+        'Documentation': 'https://github.com/natlee/HEIC2PNG',
+        'Bug Reports': 'https://github.com/natlee/HEIC2PNG/issues',
+        'Source Code': 'https://github.com/natlee/HEIC2PNG',
         # 'Funding': '',
         # 'Say Thanks!': '',
     },
@@ -30,7 +29,6 @@ setuptools.setup(
         'Topic :: Software Development :: Build Tools',
 
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
@@ -38,8 +36,8 @@ setuptools.setup(
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
     ],
-    python_requires='>=3.6',
-    # install_requires=['Pillow'],
+    python_requires='>=3.7',
+    install_requires=['pillow', 'pillow-heif'],
     extras_require={
         'dev': ['check-manifest'],
         # 'test': ['coverage'],
