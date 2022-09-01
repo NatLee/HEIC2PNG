@@ -12,8 +12,13 @@ pip install heic2png
 
 ## Usage
 
-```bash
-heic-to-jpg -f test.heic
+```python
+from heic2png import HEIC2PNG
+
+if __name__ == '__main__':
+    heic_img = HEIC2PNG('test.heic')
+    heic_img.save() # it'll show as `test.png`
+
 ```
 
 ## References
