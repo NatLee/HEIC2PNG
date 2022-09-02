@@ -8,11 +8,14 @@ And it can be used with python simple CLI.
 
 I used the pypi package template to generate this repo, you can check it in the [references](#References).
 
+
 ## Installation
 
 ```bash
 pip install heic2png
 ```
+
+You can visit it on https://pypi.org/project/HEIC2PNG/ .
 
 ## Usage
 
