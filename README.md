@@ -4,10 +4,9 @@
 
 This is a tool for converting format of HEIC image to PNG by using Python.
 
-And it can be used with python simple CLI.
+And it can be used with simple CLI mode.
 
 I used the pypi package template to generate this repo, you can check it in the [references](#References).
-
 
 ## Installation
 
@@ -30,16 +29,16 @@ if __name__ == '__main__':
 
 ```
 
-And, you can try simple CLI with this.
+And, you can try CLI with this.
 
 ```bash
-python -m heic2png --input_path test.heic --output_path test.png
+heic2png --input_path test.heic --output_path test.png
 ```
 
 Or, you want to keep original name, just use this.
 
 ```bash
-python -m heic2png --input_path test.heic
+heic2png --input_path test.heic
 ```
 
 It'll generate `test.png` for you.

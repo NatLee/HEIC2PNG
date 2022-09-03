@@ -3,7 +3,7 @@ from pillow_heif import register_heif_opener
 
 from .heic2png import HEIC2PNG
 
-def main(input_path:str, output_path:str=None):
+def cli(input_path:str, output_path:str=None):
     print(f'----- Input file path is `{input_path}`')
     if output_path:
         print(f'----- Set the output path is `{output_path}`')
@@ -21,5 +21,6 @@ def main(input_path:str, output_path:str=None):
         print(f'----- Error with {e}')
         print('----- Please report this issue!')
 
-register_heif_opener()
-Fire(main)
+def main():
+    register_heif_opener()
+    Fire(cli)

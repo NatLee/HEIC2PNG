@@ -41,5 +41,10 @@ setuptools.setup(
     extras_require={
         'dev': ['check-manifest'],
         # 'test': ['coverage'],
+    },
+    entry_points={
+        'console_scripts': [
+            'heic2png=heic2png.cli:main'
+        ]
     }
 )
