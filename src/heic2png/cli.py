@@ -13,7 +13,7 @@ def cli(input_path:str, output_path:str=None):
         output_path = heic_img.save(output_path)
         print(f'----- Output file path is `{output_path}`')
     except FileExistsError:
-        print('----- File has been already existed!')
+        print('----- File already exists!')
     except ValueError:
         print('----- You need to check the format of image!')
         print('Input must be `.heic` and output must be `.png`.')
