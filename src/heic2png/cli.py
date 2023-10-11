@@ -10,7 +10,7 @@ def cli(args):
     """
     print(f'Processing the HEIC image at `{args.input_path}`')
 
-    if args.output:
+    if args.output_path:
         print(f'Specified output path: `{args.output_path}`')
 
     if not 1 <= args.quality <= 100:
@@ -21,7 +21,7 @@ def cli(args):
         heic_img = HEIC2PNG(args.input_path, args.quality)
         print('Converting the image...')
 
-        if args.output and args.overwrite:
+        if args.output_path and args.overwrite:
             print(f'Overwriting the existing file at `{args.output_path}`')
 
         output_path = heic_img.save(args.output_path)
