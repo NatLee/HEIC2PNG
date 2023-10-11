@@ -15,7 +15,7 @@ def cli(args):
     if args.output_path:
         print(f'Specified output path: `{args.output_path}`')
 
-    if not 1 <= args.quality <= 100:
+    if args.quality and not 1 <= args.quality <= 100:
         print('Error: Quality should be a value between 1 and 100.')
         return
 
@@ -60,7 +60,7 @@ def main():
     parser = argparse.ArgumentParser(description="Convert HEIC images to PNG.")
     parser.add_argument("-i", "--input_path", required=True, help="Path to the input HEIC image.")
     parser.add_argument("-o", "--output_path", help="Path to save the converted PNG image.")
-    parser.add_argument("-q", "--quality", type=int, default=95, help="Quality of the converted PNG image (1-100).")
+    parser.add_argument("-q", "--quality", type=int, help="Quality of the converted PNG image (1-100).")
     parser.add_argument("-w", "--overwrite", action="store_true", help="Overwrite the existing file if it already exists.")
 
     args = parser.parse_args()
