@@ -1,5 +1,7 @@
 import argparse
 from pillow_heif import register_heif_opener
+
+from . import __version__
 from .heic2png import HEIC2PNG
 
 def cli(args):
@@ -18,7 +20,15 @@ def cli(args):
         return
 
     try:
-        heic_img = HEIC2PNG(args.input_path, args.quality)
+        print('==========================')
+        print('==== HEIC2PNG Options ====')
+        print('==========================')
+        print(f'>> Input file path: {args.input_path}')
+        print(f'>> Output file path: {args.output_path}')
+        print(f'>> Quality: {args.quality}')
+        print(f'>> Overwrite: {args.overwrite}')
+        print('==========================')
+        heic_img = HEIC2PNG(args.input_path, args.quality, args.overwrite)
         print('Converting the image...')
 
         if args.output_path and args.overwrite:
@@ -44,6 +54,8 @@ def main():
     Main function to register the HEIF opener and initiate the argparse CLI.
     """
     register_heif_opener()
+
+    print(f'HEIC2PNG v{__version__}')
 
     parser = argparse.ArgumentParser(description="Convert HEIC images to PNG.")
     parser.add_argument("-i", "--input_path", required=True, help="Path to the input HEIC image.")
