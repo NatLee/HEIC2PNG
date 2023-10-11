@@ -1,26 +1,55 @@
-from fire import Fire
+import argparse
 from pillow_heif import register_heif_opener
-
 from .heic2png import HEIC2PNG
 
-def cli(input_path:str, output_path:str=None):
-    print(f'----- Input file path is `{input_path}`')
-    if output_path:
-        print(f'----- Set the output path is `{output_path}`')
+def cli(args):
+    """
+    Command Line Interface for converting HEIC images to PNG.
+
+    :param args: Parsed command-line arguments.
+    """
+    print(f'Processing the HEIC image at `{args.input_path}`')
+
+    if args.output:
+        print(f'Specified output path: `{args.output_path}`')
+
+    if not 1 <= args.quality <= 100:
+        print('Error: Quality should be a value between 1 and 100.')
+        return
+
     try:
-        heic_img = HEIC2PNG(input_path)
-        print(f'----- Processing...')
-        output_path = heic_img.save(output_path)
-        print(f'----- Output file path is `{output_path}`')
+        heic_img = HEIC2PNG(args.input_path, args.quality)
+        print('Converting the image...')
+
+        if args.output and args.overwrite:
+            print(f'Overwriting the existing file at `{args.output_path}`')
+
+        output_path = heic_img.save(args.output_path)
+        print(f'Success! The converted image is saved at `{output_path}`')
+
     except FileExistsError:
-        print('----- File already exists!')
-    except ValueError:
-        print('----- You need to check the format of image!')
-        print('Input must be `.heic` and output must be `.png`.')
+        print('Error: The specified output file already exists.')
+        print('Use the -w option to overwrite the existing file.')
+
+    except ValueError as e:
+        print('Error: Invalid input or output format.')
+        print(e)
+
     except Exception as e:
-        print(f'----- Error with {e}')
-        print('----- Please report this issue!')
+        print(f'An unexpected error occurred: {e}')
+        print('Please report this issue with details of the error.')
 
 def main():
+    """
+    Main function to register the HEIF opener and initiate the argparse CLI.
+    """
     register_heif_opener()
-    Fire(cli)
+
+    parser = argparse.ArgumentParser(description="Convert HEIC images to PNG.")
+    parser.add_argument("-i", "--input_path", required=True, help="Path to the input HEIC image.")
+    parser.add_argument("-o", "--output_path", help="Path to save the converted PNG image.")
+    parser.add_argument("-q", "--quality", type=int, default=95, help="Quality of the converted PNG image (1-100).")
+    parser.add_argument("-w", "--overwrite", action="store_true", help="Overwrite the existing file if it already exists.")
+
+    args = parser.parse_args()
+    cli(args)

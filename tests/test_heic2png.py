@@ -1,39 +1,48 @@
-from genericpath import exists
-import unittest
 import pytest
+import numpy as np
+import subprocess
 from pathlib import Path
-
 from PIL import Image
 from pillow_heif import register_heif_opener
-
 from heic2png.heic2png import HEIC2PNG
 
-class TestHEIC2PNG(unittest.TestCase):
+# Paths for test files
+TEST_INPUT_FILENAME = './test.heic'
+TEST_LOW_QUALITY_OUTPUT_FILENAME = './test_low_quality.png'
+TEST_HIGH_QUALITY_OUTPUT_FILENAME = './test_high_quality.png'
 
-    __test_input_filename = './test.heic'
-    __test_output_filename = './test.png'
+# Register HEIF opener before running tests
+register_heif_opener()
 
-    def test_save(self):
+@pytest.fixture
+def cleanup():
+    # Cleanup files before and after tests
+    yield  # This allows the test to run in between the setup and teardown
 
-        img = Image.new('RGB', (30, 30), color = 'red')
-        img.save(self.__test_input_filename)
-        heic2png_obj = HEIC2PNG(self.__test_input_filename)
-        heic2png_obj.save(output_image_file_path=self.__test_output_filename)
-        self.assertTrue(Path(self.__test_output_filename).exists())
+    for path in [TEST_INPUT_FILENAME, TEST_LOW_QUALITY_OUTPUT_FILENAME, TEST_HIGH_QUALITY_OUTPUT_FILENAME]:
+        file = Path(path)
+        if file.exists():
+            file.unlink()
 
-    @pytest.fixture(autouse=True)
-    def run_around_tests(self):
-        # before
-        register_heif_opener()
-        yield
-        # after
-        input_file = Path(self.__test_input_filename)
-        output_file = Path(self.__test_output_filename)
-        if input_file.exists():
-            input_file.unlink()
-        if output_file.exists():
-            output_file.unlink()
+def test_quality(cleanup):
+    # Create a random image for accurate testing
+    data = np.random.random((200,200,3)) * 255
+    img = Image.fromarray(data.astype('uint8'))
+    img.save(TEST_INPUT_FILENAME)
 
+    # Convert to PNG
+    heic2png_obj = HEIC2PNG(TEST_INPUT_FILENAME)
+    heic2png_obj.save(output_image_file_path=TEST_HIGH_QUALITY_OUTPUT_FILENAME)
 
-if __name__ == '__main__':
-    unittest.main()
+    # Optimize PNG with pngquant
+    subprocess.run(['pngquant', '--quality=10-10', '-o', TEST_LOW_QUALITY_OUTPUT_FILENAME, TEST_HIGH_QUALITY_OUTPUT_FILENAME])
+
+    # Check if both files exist
+    assert Path(TEST_LOW_QUALITY_OUTPUT_FILENAME).exists()
+    assert Path(TEST_HIGH_QUALITY_OUTPUT_FILENAME).exists()
+
+    # Compare file sizes to check if quality setting is effective
+    low_quality_size = Path(TEST_LOW_QUALITY_OUTPUT_FILENAME).stat().st_size
+    high_quality_size = Path(TEST_HIGH_QUALITY_OUTPUT_FILENAME).stat().st_size
+
+    assert low_quality_size < high_quality_size, "High quality image should be larger in size"

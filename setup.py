@@ -15,9 +15,7 @@ setuptools.setup(
     project_urls={
         'Documentation': 'https://github.com/natlee/HEIC2PNG',
         'Bug Reports': 'https://github.com/natlee/HEIC2PNG/issues',
-        'Source Code': 'https://github.com/natlee/HEIC2PNG',
-        # 'Funding': '',
-        # 'Say Thanks!': '',
+        'Source Code': 'https://github.com/natlee/HEIC2PNG'
     },
     package_dir={'': 'src'},
     packages=setuptools.find_packages(where='src'),
@@ -32,12 +30,14 @@ setuptools.setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3 :: Only',
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
     ],
     python_requires='>=3.7',
-    install_requires=['pillow', 'pillow-heif', 'fire'],
+    install_requires=['pillow', 'pillow-heif', 'numpy', 'pngquant-cli'],
     extras_require={
         'dev': ['check-manifest'],
         # 'test': ['coverage'],
