@@ -6,7 +6,7 @@ from pillow_heif import register_heif_opener
 register_heif_opener()
 
 class HEIC2PNG:
-    def __init__(self, image_file_path: str, quality: int = 95):
+    def __init__(self, image_file_path: str, quality: int = 95, overwrite: bool = False):
         """
         Initializes the HEIC2PNG converter.
 
@@ -15,6 +15,7 @@ class HEIC2PNG:
         """
         self.image_file_path = Path(image_file_path)
         self.quality = quality
+        self.overwrite = overwrite
 
         if not self.image_file_path.is_file():
             raise FileNotFoundError(f"The file {image_file_path} does not exist.")
@@ -39,7 +40,7 @@ class HEIC2PNG:
         else:
             output_path = self.image_file_path.with_suffix(extension)
 
-        if output_path.exists():
+        if not self.overwrite and output_path.exists():
             raise FileExistsError(f"The file {output_path} already exists.")
 
         self.image.save(output_path)
