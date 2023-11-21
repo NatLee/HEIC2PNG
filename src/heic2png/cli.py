@@ -1,3 +1,4 @@
+import traceback
 import argparse
 from pillow_heif import register_heif_opener
 
@@ -44,10 +45,16 @@ def cli(args):
     except ValueError as e:
         print('Error: Invalid input or output format.')
         print(e)
+        traceback.print_exc()
 
     except Exception as e:
         print(f'An unexpected error occurred: {e}')
-        print('Please report this issue with details of the error.')
+        print('Here are the details:')
+        print('==========================')
+        traceback.print_exc()
+        print('==========================')
+        print('Please report this issue with the full traceback.')
+        print('-> https://github.com/NatLee/HEIC2PNG/issues')
 
 def main():
     """
