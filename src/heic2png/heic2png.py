@@ -48,7 +48,7 @@ class HEIC2PNG:
         self.image.save(output_path)
 
         # Optimize PNG with pngquant if quality is specified
-        if self.quality:
+        if self.quality and self.quality != 100:
             quality_str: str = f'{self.quality}-{self.quality}'
             subprocess.run(['pngquant', '--quality', quality_str, '-f', '-o', str(output_path), str(output_path)])
 
