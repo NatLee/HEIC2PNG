@@ -1,6 +1,5 @@
 import os
 import sys
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -15,6 +14,11 @@ TEST_INPUT_FILENAME = './test.heic'
 TEST_LOW_QUALITY_OUTPUT_FILENAME = './test_low_quality.png'
 TEST_HIGH_QUALITY_OUTPUT_FILENAME = './test_high_quality.png'
 
+# Transparency test files
+TEST_TRANSPARENT_INPUT_FILENAME = './test_transparent.png'
+TEST_TRANSPARENT_OUTPUT_FILENAME = './test_transparent_output.png'
+TEST_TRANSPARENT_OPTIMIZED_FILENAME = './test_transparent_optimized.png'
+
 # Register HEIF opener before running tests
 register_heif_opener()
 
@@ -23,7 +27,16 @@ def cleanup():
     # Cleanup files before and after tests
     yield  # This allows the test to run in between the setup and teardown
 
-    for path in [TEST_INPUT_FILENAME, TEST_LOW_QUALITY_OUTPUT_FILENAME, TEST_HIGH_QUALITY_OUTPUT_FILENAME]:
+    all_test_files = [
+        TEST_INPUT_FILENAME, 
+        TEST_LOW_QUALITY_OUTPUT_FILENAME, 
+        TEST_HIGH_QUALITY_OUTPUT_FILENAME,
+        TEST_TRANSPARENT_INPUT_FILENAME,
+        TEST_TRANSPARENT_OUTPUT_FILENAME,
+        TEST_TRANSPARENT_OPTIMIZED_FILENAME
+    ]
+    
+    for path in all_test_files:
         file = Path(path)
         if file.exists():
             file.unlink()
@@ -34,12 +47,13 @@ def test_quality(cleanup):
     img = Image.fromarray(data.astype('uint8'))
     img.save(TEST_INPUT_FILENAME)
 
-    # Convert to PNG
-    heic2png_obj = HEIC2PNG(TEST_INPUT_FILENAME)
-    heic2png_obj.save(output_image_file_path=TEST_HIGH_QUALITY_OUTPUT_FILENAME)
+    # Convert to PNG with high quality (no optimization)
+    heic2png_obj_high = HEIC2PNG(TEST_INPUT_FILENAME, quality=None)
+    heic2png_obj_high.save(output_image_file_path=TEST_HIGH_QUALITY_OUTPUT_FILENAME)
 
-    # Optimize PNG with pngquant
-    subprocess.run(['pngquant', '--quality=10-10', '-o', TEST_LOW_QUALITY_OUTPUT_FILENAME, TEST_HIGH_QUALITY_OUTPUT_FILENAME])
+    # Convert to PNG with low quality (with optimization)
+    heic2png_obj_low = HEIC2PNG(TEST_INPUT_FILENAME, quality=10)
+    heic2png_obj_low.save(output_image_file_path=TEST_LOW_QUALITY_OUTPUT_FILENAME)
 
     # Check if both files exist
     assert Path(TEST_LOW_QUALITY_OUTPUT_FILENAME).exists()
@@ -60,7 +74,7 @@ def test_stdin_stdout():
             os.unlink(outputfile)
         with (open(inputfile, "rb") as sys.stdin,
               open(outputfile, "wb") as sys.stdout):
-            converter = HEIC2PNG()
+            converter = HEIC2PNG("")  # Pass empty string to read from stdin
             converter.save()
     finally:
         sys.stdin, sys.stdout = save_stdin, save_stdout
@@ -68,3 +82,110 @@ def test_stdin_stdout():
               open(outputfile, "rb") as outp):
             assert len(outp.read()) > len(inp.read())
         os.unlink(outputfile)
+
+def test_transparency_preservation(cleanup):
+    """Test that transparency is preserved during PNG optimization."""
+    # Create a complex transparent image
+    data = np.zeros((200, 200, 4), dtype=np.uint8)
+    
+    # Create gradient background with transparency
+    for i in range(200):
+        for j in range(200):
+            data[i, j, 0] = int(i * 255 / 200)  # Red gradient
+            data[i, j, 1] = int(j * 255 / 200)  # Green gradient
+            data[i, j, 2] = int((i + j) * 255 / 400)  # Blue gradient
+            data[i, j, 3] = 200  # Semi-transparent
+    
+    # Add fully opaque region
+    data[50:150, 50:150, 3] = 255
+    
+    # Add fully transparent region
+    data[0:50, 0:50, 3] = 0
+    
+    # Save original transparent image
+    img = Image.fromarray(data)
+    img.save(TEST_TRANSPARENT_INPUT_FILENAME)
+    
+    # Test conversion without optimization
+    converter_no_opt = HEIC2PNG(TEST_TRANSPARENT_INPUT_FILENAME, quality=None)
+    converter_no_opt.save(output_image_file_path=TEST_TRANSPARENT_OUTPUT_FILENAME)
+    
+    # Test conversion with optimization
+    converter_opt = HEIC2PNG(TEST_TRANSPARENT_INPUT_FILENAME, quality=30)
+    converter_opt.save(output_image_file_path=TEST_TRANSPARENT_OPTIMIZED_FILENAME)
+    
+    # Check that files exist
+    assert Path(TEST_TRANSPARENT_OUTPUT_FILENAME).exists()
+    assert Path(TEST_TRANSPARENT_OPTIMIZED_FILENAME).exists()
+    
+    # Load and check the optimized image
+    optimized_img = Image.open(TEST_TRANSPARENT_OPTIMIZED_FILENAME)
+    
+    # Check that transparency is preserved
+    assert optimized_img.mode in ['RGBA', 'LA', 'P'], f"Expected transparent mode, got {optimized_img.mode}"
+    
+    # If it's palette mode, check for transparency information
+    if optimized_img.mode == 'P':
+        assert optimized_img.info.get('transparency') is not None, "Palette image should have transparency information"
+        
+        # Check that palette has reasonable number of colors
+        palette = optimized_img.getpalette()
+        assert palette is not None, "Palette image should have a palette"
+        num_colors = len(palette) // 3
+        assert 2 <= num_colors <= 256, f"Expected 2-256 colors, got {num_colors}"
+    
+    # Check file size reduction
+    original_size = Path(TEST_TRANSPARENT_INPUT_FILENAME).stat().st_size
+    optimized_size = Path(TEST_TRANSPARENT_OPTIMIZED_FILENAME).stat().st_size
+    
+    # Optimized image should be smaller
+    assert optimized_size < original_size, f"Optimized image should be smaller: {optimized_size} >= {original_size}"
+    
+    # Should achieve reasonable compression (at least 10% reduction)
+    reduction_percent = (original_size - optimized_size) / original_size * 100
+    assert reduction_percent >= 10, f"Expected at least 10% reduction, got {reduction_percent:.1f}%"
+
+def test_transparency_edge_cases(cleanup):
+    """Test edge cases for transparency handling."""
+    # Test 1: Fully transparent image
+    data = np.zeros((100, 100, 4), dtype=np.uint8)
+    data[:, :, 3] = 0  # Fully transparent
+    img = Image.fromarray(data)
+    img.save(TEST_TRANSPARENT_INPUT_FILENAME)
+    
+    converter = HEIC2PNG(TEST_TRANSPARENT_INPUT_FILENAME, quality=50, overwrite=True)
+    converter.save(output_image_file_path=TEST_TRANSPARENT_OUTPUT_FILENAME)
+    
+    result_img = Image.open(TEST_TRANSPARENT_OUTPUT_FILENAME)
+    assert result_img.mode in ['RGBA', 'LA', 'P'], "Fully transparent image should preserve transparency mode"
+    
+    # Test 2: Fully opaque image
+    data = np.random.randint(0, 255, (100, 100, 4), dtype=np.uint8)
+    data[:, :, 3] = 255  # Fully opaque
+    img = Image.fromarray(data)
+    img.save(TEST_TRANSPARENT_INPUT_FILENAME)
+    
+    converter = HEIC2PNG(TEST_TRANSPARENT_INPUT_FILENAME, quality=50, overwrite=True)
+    converter.save(output_image_file_path=TEST_TRANSPARENT_OUTPUT_FILENAME)
+    
+    result_img = Image.open(TEST_TRANSPARENT_OUTPUT_FILENAME)
+    assert result_img.mode in ['RGBA', 'LA', 'P'], "Fully opaque image should preserve transparency mode"
+    
+    # Test 3: Mixed transparency levels
+    data = np.zeros((100, 100, 4), dtype=np.uint8)
+    data[:, :, :3] = 128  # Gray color
+    data[0:33, :, 3] = 0      # Fully transparent
+    data[33:66, :, 3] = 128  # Semi-transparent
+    data[66:100, :, 3] = 255 # Fully opaque
+    
+    img = Image.fromarray(data)
+    img.save(TEST_TRANSPARENT_INPUT_FILENAME)
+    
+    converter = HEIC2PNG(TEST_TRANSPARENT_INPUT_FILENAME, quality=30, overwrite=True)
+    converter.save(output_image_file_path=TEST_TRANSPARENT_OUTPUT_FILENAME)
+    
+    result_img = Image.open(TEST_TRANSPARENT_OUTPUT_FILENAME)
+    assert result_img.mode in ['RGBA', 'LA', 'P'], "Mixed transparency image should preserve transparency mode"
+    
+    if result_img.mode == 'P':
+        assert result_img.info.get('transparency') is not None, "Mixed transparency should be preserved in palette"

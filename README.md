@@ -1,9 +1,16 @@
-# HEIC2PNG
+﻿# HEIC2PNG
 
 [![Test](https://github.com/NatLee/HEIC2PNG/actions/workflows/test.yml/badge.svg)](https://github.com/NatLee/HEIC2PNG/actions/workflows/test.yml)
 [![Release](https://github.com/NatLee/HEIC2PNG/actions/workflows/release.yml/badge.svg)](https://github.com/NatLee/HEIC2PNG/actions/workflows/release.yml)
 
 This is a tool for converting the format of HEIC images to PNG using Python. It now supports quality adjustment and has an option to overwrite existing files, enhancing the flexibility and usability of the tool.
+
+## Features
+
+- **HEIC to PNG conversion** with high quality output
+- **Quality control** (1-100) for file size optimization
+- **Pure Python implementation** using PIL (Pillow) built-in optimization
+- **Cross-platform compatibility** - works on all platforms
 
 ## Installation
 
@@ -48,8 +55,9 @@ To overwrite an existing PNG file, use the `-w`` flag:
 ```bash
 heic2png -i test.heic -o test.png -q 90 -w
 ```
+
 ## References
 
 - [Example PyPi Package](https://github.com/tomchen/example_pypi_package)
 - [Pillow HEIF](https://github.com/bigcat88/pillow_heif)
-- [pngquant](https://pngquant.org/)
+- [PIL Image.quantize()](https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.quantize)
