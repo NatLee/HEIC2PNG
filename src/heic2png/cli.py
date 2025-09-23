@@ -96,6 +96,20 @@ Notes:
     
     return parser
 
+def is_stream_mode(args: argparse.Namespace) -> bool:
+    """
+    Determine if we're in stream mode (stdin/stdout).
+    
+    Args:
+        args: Parsed command line arguments
+        
+    Returns:
+        bool: True if in stream mode, False otherwise
+    """
+    # Stream mode: no input file specified (reading from stdin)
+    return args.input_path is None
+
+
 def validate_args(args: argparse.Namespace) -> None:
     """
     Validate command line arguments.
@@ -138,26 +152,43 @@ def process_image(args: argparse.Namespace) -> Optional[Path]:
             overwrite=args.overwrite
         )
         
-        if not args.quiet:
+        # Determine if we're in stream mode
+        stream_mode = is_stream_mode(args)
+        
+        # Handle output path logic
+        if stream_mode:
+            # Stream mode: no input file, output to stdout
+            output_path = None
+        elif args.output_path is None:
+            # Regular mode with input file but no output file: generate default name
+            input_file = Path(args.input_path)
+            output_path = input_file.with_suffix(f".{args.format}")
+        else:
+            # Regular mode with both input and output files
+            output_path = args.output_path
+        
+        # Only show info messages if not in stream mode
+        if not stream_mode and not args.quiet:  
             logger.info("Converting image...")
             
-        if args.verbose:
+        if not stream_mode and args.verbose:
             logger.info("Conversion settings:")
-            logger.info(f"Input: {args.input_path or 'stdin'}")
-            logger.info(f"Output: {args.output_path or 'stdout'}")
+            logger.info(f"Input: {args.input_path}")
+            logger.info(f"Output: {output_path}")
             logger.info(f"Quality: {args.quality or 'default'}")
             logger.info(f"Format: {args.format}")
             logger.info(f"Overwrite: {args.overwrite}")
 
-        output_path = converter.save(
-            output_image_file_path=args.output_path,
+        result_path = converter.save(
+            output_image_file_path=output_path,
             extension=f".{args.format}"
         )
         
-        if not args.quiet and output_path != sys.stdout:
-            logger.info(f"Successfully saved converted image to: {output_path}")
+        # Only show success message if not in stream mode and not outputting to stdout
+        if not stream_mode and output_path is not None and not args.quiet:
+            logger.info(f"Successfully saved converted image to: {result_path}")
         
-        return output_path
+        return result_path
 
     except FileExistsError:
         raise CLIError(

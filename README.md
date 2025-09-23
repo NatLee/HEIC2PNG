@@ -20,6 +20,28 @@ pip install heic2png
 
 Visit [HEIC2PNG on PyPI](https://pypi.org/project/HEIC2PNG/) for more details.
 
+## Quick Start
+
+### Regular File Processing (with processing info)
+```bash
+# Convert with default settings
+heic2png -i image.heic
+# Output: Converting image...
+#         Successfully saved converted image to: image.png
+
+# Convert with quality optimization
+heic2png -i image.heic --quality 50 -o optimized.png
+```
+
+### Stream Processing (silent, for pipelines)
+```bash
+# Silent conversion for shell pipelines
+cat image.heic | heic2png > output.png
+
+# With quality optimization
+cat image.heic | heic2png --quality 50 > optimized.png
+```
+
 ## Usage
 
 ### As a Library
@@ -56,20 +78,86 @@ To overwrite an existing PNG file, use the `-w`` flag:
 heic2png -i test.heic -o test.png -q 90 -w
 ```
 
+## Usage Examples
+
+### Regular File Processing
+
+#### Basic Conversion
+```bash
+# Convert with default settings (shows processing info)
+heic2png -i image.heic
+# Output: Converting image...
+#         Successfully saved converted image to: image.png
+
+# Convert with explicit output file
+heic2png -i image.heic -o output.png
+
+# Convert with quality optimization
+heic2png -i image.heic --quality 50 -o optimized.png
+```
+
+#### Verbose Mode
+```bash
+# Show detailed conversion settings
+heic2png -i image.heic --verbose
+# Output:
+# Converting image...
+# Conversion settings:
+# Input: image.heic
+# Output: image.png
+# Quality: 80
+# Format: png
+# Overwrite: False
+# Successfully saved converted image to: image.png
+```
+
+#### Quality Control
+```bash
+# High quality (larger file)
+heic2png -i image.heic --quality 95 -o high_quality.png
+
+# Low quality (smaller file)
+heic2png -i image.heic --quality 30 -o compressed.png
+
+# Default quality (80)
+heic2png -i image.heic -o default.png
+```
+
+#### Format Conversion
+```bash
+# Convert to JPEG
+heic2png -i image.heic --format jpg -o output.jpg
+
+# Convert to PNG (default)
+heic2png -i image.heic -o output.png
+```
+
+#### Batch Processing
+```bash
+# Process multiple files
+for file in *.heic; do
+    heic2png -i "$file" --quality 60 --overwrite
+done
+
+# Process with different quality settings
+heic2png -i photo1.heic --quality 90 -o photo1_hq.png
+heic2png -i photo2.heic --quality 50 -o photo2_compressed.png
+```
+
 ### Stream Processing (stdin/stdout)
 
 HEIC2PNG supports reading from stdin and writing to stdout, making it perfect for shell pipelines and automated processing:
 
 #### Basic Stream Processing
 ```bash
-# Read from stdin, write to stdout
+# Read from stdin, write to stdout (no processing messages)
 cat image.heic | heic2png > output.png
 
-# Read from stdin, write to file
+# Read from stdin, write to file (no processing messages)
 cat image.heic | heic2png -o output.png
 
-# Read from file, write to stdout
-heic2png -i image.heic > output.png
+# Note: 'heic2png -i image.heic > output.png' now shows processing info
+# Use 'cat image.heic | heic2png > output.png' for silent stream processing
 ```
 
 #### Quality Optimization in Streams
@@ -107,9 +195,12 @@ cat image.heic | heic2png | convert - -resize 50% resized.png
 #### Stream Processing Notes
 - **Input**: If no `-i` parameter is specified, input is read from stdin
 - **Output**: If no `-o` parameter is specified, output is written to stdout
+- **Messages**: Stream mode (no `-i` parameter) produces no processing messages
 - **Quality**: Works with all quality settings (1-100)
 - **Formats**: Supports PNG, JPG, and JPEG output formats
 - **Transparency**: Fully preserved in stream processing
+- **Behavior**: `heic2png -i file.heic > output.png` shows processing info (regular mode)
+- **Behavior**: `cat file.heic | heic2png > output.png` is silent (stream mode)
 
 ## References
 
