@@ -72,14 +72,14 @@ def test_stdin_stdout():
         save_stdin, save_stdout = (sys.stdin, sys.stdout)
         if os.path.exists(outputfile):
             os.unlink(outputfile)
-        with (open(inputfile, "rb") as sys.stdin,
-              open(outputfile, "wb") as sys.stdout):
+        with open(inputfile, "rb") as sys.stdin, \
+             open(outputfile, "wb") as sys.stdout:
             converter = HEIC2PNG("")  # Pass empty string to read from stdin
             converter.save()
     finally:
         sys.stdin, sys.stdout = save_stdin, save_stdout
-        with (open(inputfile, "rb") as inp,
-              open(outputfile, "rb") as outp):
+        with open(inputfile, "rb") as inp, \
+             open(outputfile, "rb") as outp:
             assert len(outp.read()) > len(inp.read())
         os.unlink(outputfile)
 
