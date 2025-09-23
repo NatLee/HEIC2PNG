@@ -47,7 +47,7 @@ Notes:
     input_group = parser.add_argument_group('Input/Output Options')
     input_group.add_argument(
         "-i", "--input-path",
-        help="Path to the input HEIC image",
+        help="Path to the input HEIC image (if not specified, reads from stdin)",
         type=Path
     )
     input_group.add_argument(
@@ -129,8 +129,11 @@ def process_image(args: argparse.Namespace) -> Optional[Path]:
         CLIError: If processing fails
     """
     try:
+        # Convert None to empty string for stdin reading
+        input_path = args.input_path if args.input_path is not None else ""
+        
         converter = HEIC2PNG(
-            image_file_path=args.input_path,
+            image_file_path=input_path,
             quality=args.quality,
             overwrite=args.overwrite
         )
