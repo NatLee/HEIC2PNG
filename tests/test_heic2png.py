@@ -189,3 +189,100 @@ def test_transparency_edge_cases(cleanup):
     
     if result_img.mode == 'P':
         assert result_img.info.get('transparency') is not None, "Mixed transparency should be preserved in palette"
+
+def test_cli_stdin_stdout_compatibility(cleanup):
+    """Test CLI stdin/stdout functionality and compatibility with regular file operations."""
+    import subprocess
+    import os
+    
+    # Test 1: Regular file input/output
+    input_file = "tests/calder-flamingo.heic"
+    output_file = "test_regular_cli.png"
+    
+    result = subprocess.run([
+        'heic2png', '-i', input_file, '-o', output_file, '--quality', '80', '--overwrite'
+    ], capture_output=True, text=True)
+    
+    assert result.returncode == 0, f"Regular CLI failed: {result.stderr}"
+    assert os.path.exists(output_file), "Regular CLI output file not created"
+    
+    # Test 2: stdin/stdout
+    stdin_output_file = "test_stdin_cli.png"
+    
+    with open(input_file, 'rb') as inp:
+        with open(stdin_output_file, 'wb') as outp:
+            result = subprocess.run([
+                'heic2png', '--quality', '80'
+            ], stdin=inp, stdout=outp, stderr=subprocess.PIPE, text=True)
+    
+    assert result.returncode == 0, f"stdin/stdout CLI failed: {result.stderr}"
+    assert os.path.exists(stdin_output_file), "stdin/stdout output file not created"
+    
+    # Test 3: Compare file sizes (should be similar for same quality)
+    regular_size = os.path.getsize(output_file)
+    stdin_size = os.path.getsize(stdin_output_file)
+    
+    # Allow 5% difference due to compression variations
+    size_diff_percent = abs(regular_size - stdin_size) / regular_size * 100
+    assert size_diff_percent < 5, f"File sizes differ too much: {regular_size} vs {stdin_size} ({size_diff_percent:.1f}%)"
+    
+    # Test 4: stdin with different quality
+    stdin_optimized_file = "test_stdin_optimized.png"
+    
+    with open(input_file, 'rb') as inp:
+        with open(stdin_optimized_file, 'wb') as outp:
+            result = subprocess.run([
+                'heic2png', '--quality', '30'
+            ], stdin=inp, stdout=outp, stderr=subprocess.PIPE, text=True)
+    
+    assert result.returncode == 0, f"stdin/stdout optimized CLI failed: {result.stderr}"
+    assert os.path.exists(stdin_optimized_file), "stdin/stdout optimized output file not created"
+    
+    # Test 5: Verify optimization worked (optimized should be smaller)
+    optimized_size = os.path.getsize(stdin_optimized_file)
+    assert optimized_size < stdin_size, f"Optimized file should be smaller: {optimized_size} >= {stdin_size}"
+    
+    # Test 6: stdout only (no output file specified)
+    stdout_output_file = "test_stdout_only.png"
+    
+    with open(input_file, 'rb') as inp:
+        with open(stdout_output_file, 'wb') as outp:
+            result = subprocess.run([
+                'heic2png', '--quality', '80'
+            ], stdin=inp, stdout=outp, stderr=subprocess.PIPE, text=True)
+    
+    assert result.returncode == 0, f"stdout-only CLI failed: {result.stderr}"
+    assert os.path.exists(stdout_output_file), "stdout-only output file not created"
+    
+    # Cleanup test files
+    for file in [output_file, stdin_output_file, stdin_optimized_file, stdout_output_file]:
+        if os.path.exists(file):
+            os.remove(file)
+
+def test_cli_error_handling():
+    """Test CLI error handling for invalid inputs."""
+    import subprocess
+    
+    # Test 1: Non-existent input file
+    result = subprocess.run([
+        'heic2png', '-i', 'non_existent.heic', '-o', 'output.png'
+    ], capture_output=True, text=True)
+    
+    assert result.returncode != 0, "Should fail for non-existent file"
+    assert "not found" in result.stderr.lower() or "error" in result.stderr.lower()
+    
+    # Test 2: Invalid quality value
+    result = subprocess.run([
+        'heic2png', '-i', 'tests/calder-flamingo.heic', '-o', 'output.png', '--quality', '150'
+    ], capture_output=True, text=True)
+    
+    assert result.returncode != 0, "Should fail for invalid quality"
+    assert "quality" in result.stderr.lower() or "error" in result.stderr.lower()
+    
+    # Test 3: stdin with no data
+    result = subprocess.run([
+        'heic2png', '-o', 'output.png'
+    ], stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    
+    assert result.returncode != 0, "Should fail for empty stdin"
+    assert "error" in result.stderr.lower() or "failed" in result.stderr.lower()
