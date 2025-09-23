@@ -1,9 +1,15 @@
+import sys
 import traceback
 import argparse
 from pillow_heif import register_heif_opener
 
-from . import __version__
-from .heic2png import HEIC2PNG
+from heic2png import __version__
+from heic2png.heic2png import HEIC2PNG
+
+
+def eprint(*args, file=sys.stderr, **kwds):
+    "print to stderr by default"
+    print(*args, file=file, **kwds)
 
 def cli(args):
     """
@@ -11,50 +17,52 @@ def cli(args):
 
     :param args: Parsed command-line arguments.
     """
-    print(f'Processing the HEIC image at `{args.input_path}`')
+    eprint(f'Processing the HEIC image at `{args.input_path}`')
 
     if args.output_path:
-        print(f'Specified output path: `{args.output_path}`')
+        eprint(f'Specified output path: `{args.output_path}`')
 
     if args.quality and not 1 <= args.quality <= 100:
-        print('Error: Quality should be a value between 1 and 100.')
+        eprint('Error: Quality should be a value between 1 and 100.')
         return
 
     try:
-        print('==========================')
-        print('==== HEIC2PNG Options ====')
-        print('==========================')
-        print(f'>> Input file path: {args.input_path}')
-        print(f'>> Output file path: {args.output_path}')
-        print(f'>> Quality: {args.quality}')
-        print(f'>> Overwrite: {args.overwrite}')
-        print('==========================')
+        eprint('==========================')
+        eprint('==== HEIC2PNG Options ====')
+        eprint('==========================')
+        eprint(f'>> Input file path: {args.input_path}')
+        eprint(f'>> Output file path: {args.output_path}')
+        eprint(f'>> Quality: {args.quality}')
+        eprint(f'>> Overwrite: {args.overwrite}')
+        eprint('==========================')
         heic_img = HEIC2PNG(args.input_path, args.quality, args.overwrite)
-        print('Converting the image...')
+        eprint('Converting the image...')
 
         if args.output_path and args.overwrite:
-            print(f'Overwriting the existing file at `{args.output_path}`')
+            eprint(f'Overwriting the existing file at `{args.output_path}`')
 
         output_path = heic_img.save(args.output_path)
-        print(f'Success! The converted image is saved at `{output_path}`')
+        eprint(f'Success! The converted image is saved at `{output_path}`')
 
     except FileExistsError:
-        print('Error: The specified output file already exists.')
-        print('Use the -w option to overwrite the existing file.')
+        eprint('Error: The specified output file already exists.')
+        eprint('Use the -w option to overwrite the existing file.')
 
     except ValueError as e:
-        print('Error: Invalid input or output format.')
-        print(e)
+        eprint('Error: Invalid input or output format.')
+        eprint(e)
         traceback.print_exc()
 
     except Exception as e:
-        print(f'An unexpected error occurred: {e}')
-        print('Here are the details:')
-        print('==========================')
+        eprint(f'An unexpected error occurred: {e}')
+        eprint('Here are the details:')
+        eprint('==========================')
         traceback.print_exc()
-        print('==========================')
-        print('Please report this issue with the full traceback.')
-        print('-> https://github.com/NatLee/HEIC2PNG/issues')
+        eprint('==========================')
+        eprint('Please report this issue with the full traceback.')
+        eprint('-> https://github.com/NatLee/HEIC2PNG/issues')
+
+
 
 def main():
     """
@@ -62,10 +70,14 @@ def main():
     """
     register_heif_opener()
 
-    print(f'HEIC2PNG v{__version__}')
+    eprint(f'HEIC2PNG v{__version__}')
 
-    parser = argparse.ArgumentParser(description="Convert HEIC images to PNG.")
-    parser.add_argument("-i", "--input_path", required=True, help="Path to the input HEIC image.")
+    parser = argparse.ArgumentParser(description="Convert HEIC images to PNG.",
+        epilog="""
+In the absence of an input (-i) file, input is read from sys.stdin.
+In the absence of an output (-o) file, output is written to sys.stdout.
+""")
+    parser.add_argument("-i", "--input_path", help="Path to the input HEIC image.")
     parser.add_argument("-o", "--output_path", help="Path to save the converted PNG image.")
     parser.add_argument("-q", "--quality", type=int, help="Quality of the converted PNG image (1-100).")
     parser.add_argument("-w", "--overwrite", action="store_true", help="Overwrite the existing file if it already exists.")

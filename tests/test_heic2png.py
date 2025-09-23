@@ -1,9 +1,13 @@
-import pytest
-import numpy as np
+import os
+import sys
 import subprocess
 from pathlib import Path
+
+import pytest
+import numpy as np
 from PIL import Image
 from pillow_heif import register_heif_opener
+
 from heic2png.heic2png import HEIC2PNG
 
 # Paths for test files
@@ -46,3 +50,21 @@ def test_quality(cleanup):
     high_quality_size = Path(TEST_HIGH_QUALITY_OUTPUT_FILENAME).stat().st_size
 
     assert low_quality_size < high_quality_size, "High quality image should be larger in size"
+
+def test_stdin_stdout():
+    inputfile = "tests/calder-flamingo.heic"
+    outputfile = "tests/calder-flamingo.png"
+    try:
+        save_stdin, save_stdout = (sys.stdin, sys.stdout)
+        if os.path.exists(outputfile):
+            os.unlink(outputfile)
+        with (open(inputfile, "rb") as sys.stdin,
+              open(outputfile, "wb") as sys.stdout):
+            converter = HEIC2PNG()
+            converter.save()
+    finally:
+        sys.stdin, sys.stdout = save_stdin, save_stdout
+        with (open(inputfile, "rb") as inp,
+              open(outputfile, "rb") as outp):
+            assert len(outp.read()) > len(inp.read())
+        os.unlink(outputfile)
