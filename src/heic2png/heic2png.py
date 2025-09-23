@@ -13,7 +13,7 @@ class HEIC2PNG:
     A converter class for converting HEIC images to PNG format.
     
     Supports reading from file path or file-like objects and can output to
-    file path or stdout. Includes optional PNG optimization using pngquant.
+    file path or stdout.
     """
     
     SUPPORTED_EXTENSIONS = {'.heic', '.png', '.jpg', '.jpeg'}
