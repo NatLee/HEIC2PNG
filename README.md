@@ -56,6 +56,61 @@ To overwrite an existing PNG file, use the `-w`` flag:
 heic2png -i test.heic -o test.png -q 90 -w
 ```
 
+### Stream Processing (stdin/stdout)
+
+HEIC2PNG supports reading from stdin and writing to stdout, making it perfect for shell pipelines and automated processing:
+
+#### Basic Stream Processing
+```bash
+# Read from stdin, write to stdout
+cat image.heic | heic2png > output.png
+
+# Read from stdin, write to file
+cat image.heic | heic2png -o output.png
+
+# Read from file, write to stdout
+heic2png -i image.heic > output.png
+```
+
+#### Quality Optimization in Streams
+```bash
+# Low quality (smaller file size)
+cat image.heic | heic2png --quality 30 > optimized.png
+
+# High quality (larger file size)
+cat image.heic | heic2png --quality 90 > high_quality.png
+```
+
+#### Format Conversion in Streams
+```bash
+# Convert to JPEG
+cat image.heic | heic2png --format jpg > output.jpg
+
+# Convert to PNG (default)
+cat image.heic | heic2png > output.png
+```
+
+#### Advanced Pipeline Examples
+```bash
+# Batch processing with quality optimization
+for file in *.heic; do
+    cat "$file" | heic2png --quality 50 > "${file%.heic}_optimized.png"
+done
+
+# Process and compress in one pipeline
+cat image.heic | heic2png --quality 40 | gzip > compressed.png.gz
+
+# Convert and resize (requires additional tools)
+cat image.heic | heic2png | convert - -resize 50% resized.png
+```
+
+#### Stream Processing Notes
+- **Input**: If no `-i` parameter is specified, input is read from stdin
+- **Output**: If no `-o` parameter is specified, output is written to stdout
+- **Quality**: Works with all quality settings (1-100)
+- **Formats**: Supports PNG, JPG, and JPEG output formats
+- **Transparency**: Fully preserved in stream processing
+
 ## References
 
 - [Example PyPi Package](https://github.com/tomchen/example_pypi_package)
