@@ -42,11 +42,14 @@ class HEIC2PNG:
         self.quality = quality
         self.overwrite = overwrite
         
-        # Handle input source
+        # Handle input source. input_path is only set when reading from a file path;
+        # save() uses it to derive the default output name.
+        self.input_path: Optional[Path] = None
         if not image_file_path:
             self.image_file_path = self._get_binary_stdin()
         elif isinstance(image_file_path, (str, Path)):
             self.image_file_path = self._validate_input_path(Path(image_file_path))
+            self.input_path = self.image_file_path
         else:
             # Assume it's a file-like object
             self.image_file_path = image_file_path
@@ -66,7 +69,10 @@ class HEIC2PNG:
 
         Args:
             output_image_file_path: Path to save the converted image.
-                                  If None, writes to stdout.
+                                  If None and the input was a file path, saves next
+                                  to the input with the new extension (e.g. photo.heic
+                                  -> photo.png), as in 1.1.x. If None and the input
+                                  was stdin or a file-like object, writes to stdout.
             extension: The target file extension (default: '.png')
 
         Returns:
@@ -83,10 +89,11 @@ class HEIC2PNG:
             raise ValueError(f"Unsupported output format: {extension}")
 
         # Handle output destination
-        if output_image_file_path is None:
+        if output_image_file_path is None and self.input_path is None:
             output_path = self._get_binary_stdout()
         else:
-            output_path = Path(output_image_file_path)
+            output_path = (Path(output_image_file_path) if output_image_file_path is not None
+                           else self.input_path.with_suffix(extension))
             if output_path.exists() and not self.overwrite:
                 raise FileExistsError(f"Output file already exists: {output_path}")
 

@@ -24,6 +24,28 @@ def test_jpeg_output(tmp_path, fmt, mode):
             assert result.getpixel((4, 4)) == pytest.approx((255, 255, 255), abs=3)
 
 
+def test_save_without_path_writes_next_to_input(tmp_path):
+    # README and 1.1.x: HEIC2PNG('test.heic').save() creates test.png; 1.2.0 wrote PNG bytes to stdout.
+    src = tmp_path / "photo.jpg"
+    Image.new("RGB", (8, 8), (0, 128, 255)).save(src)
+
+    result = HEIC2PNG(str(src)).save()
+
+    assert result == tmp_path / "photo.png"
+    with Image.open(result) as img:
+        assert img.format == "PNG"
+
+
+def test_save_without_path_respects_overwrite(tmp_path):
+    src = tmp_path / "photo.jpg"
+    Image.new("RGB", (8, 8)).save(src)
+    (tmp_path / "photo.png").write_bytes(b"existing")
+
+    with pytest.raises(FileExistsError):
+        HEIC2PNG(str(src)).save()
+    assert HEIC2PNG(str(src), overwrite=True).save() == tmp_path / "photo.png"
+
+
 def test_short_q_sets_quality():
     # 1.1.x and the README use `-q 90` for quality; 1.2.0 had turned -q into --quiet.
     args = setup_parser().parse_args(["-i", "photo.heic", "-q", "90"])
