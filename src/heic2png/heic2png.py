@@ -154,7 +154,8 @@ class HEIC2PNG:
             return image.quantize(colors=max_colors, method=Image.Quantize.FASTOCTREE)
         if image.mode == 'RGB':
             return image.quantize(colors=max_colors, method=Image.Quantize.MEDIANCUT)
-        if image.mode == 'P' and len(image.getcolors()) > max_colors:
+        # getcolors() returns None only above 256 colors, which a palette image cannot have.
+        if image.mode == 'P' and len(image.getcolors() or ()) > max_colors:
             return image.quantize(colors=max_colors, method=Image.Quantize.MEDIANCUT)
         return image
 
