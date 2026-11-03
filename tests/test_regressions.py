@@ -94,6 +94,17 @@ def test_cli_still_prints_progress(tmp_path):
     assert "Successfully saved converted image" in out.stderr
 
 
+def test_verbose_does_not_print_pillow_debug_messages(heic2png, tmp_path):
+    # --verbose set the root logger to DEBUG, so a PNG input printed lines like "STREAM b'IHDR' 16 13".
+    Image.new("RGB", (8, 8)).save(tmp_path / "photo.png")
+
+    result = heic2png("-i", "photo.png", "-o", "out.png", "--verbose")
+
+    assert result.returncode == 0
+    assert b"Conversion settings:" in result.stderr
+    assert b"STREAM" not in result.stderr
+
+
 def test_stdin_with_output_path_writes_the_file(tmp_path):
     # README: `cat image.heic | heic2png -o output.png`; 1.2.0 ignored -o and wrote to stdout.
     src = tmp_path / "photo.png"

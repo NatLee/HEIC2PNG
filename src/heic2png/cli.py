@@ -216,11 +216,9 @@ def cli(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     logging.basicConfig(format='%(message)s', level=logging.INFO, stream=sys.stderr)
-    # Configure logging based on verbosity
+    # --verbose only adds INFO lines of our own; a DEBUG level would also print Pillow's internals.
     if args.quiet:
         logging.getLogger().setLevel(logging.WARNING)
-    elif args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
 
     try:
         validate_args(args)
