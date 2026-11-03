@@ -58,9 +58,11 @@ Notes:
     
     conversion_group = parser.add_argument_group('Conversion Options')
     conversion_group.add_argument(
-        "--quality",
+        "-q", "--quality",
         type=int,
-        help="Quality of the converted image (1-100), default: 80",
+        help="Quality of the converted image (1-100), default: 80. "
+             "Below 100, PNG output is reduced to a palette of at most 256 colors; "
+             "use 100 to keep every color.",
         metavar="QUALITY",
         choices=range(1, 101),
         default=80,
@@ -79,7 +81,7 @@ Notes:
         help="Overwrite existing output file"
     )
     behavior_group.add_argument(
-        "-q", "--quiet",
+        "--quiet",
         action="store_true",
         help="Suppress non-error messages"
     )
