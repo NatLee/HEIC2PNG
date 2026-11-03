@@ -1,0 +1,146 @@
+<!doctype html>
+<!--
+  README banner. Render the light and dark versions (#dark picks the dark theme) with a
+  Chromium-based browser, e.g.
+    msedge --headless=new --hide-scrollbars --force-device-scale-factor=2 --window-size=960,400
+           --default-background-color=00000000 --virtual-time-budget=5000
+           --screenshot=hero-dark.png "file:///…/hero.html#dark"
+
+  flamingo-thumb.jpg is real heic2png output: tests/calder-flamingo.heic converted with
+  `heic2png -i tests/calder-flamingo.heic -q 100 -o flamingo.png`, then cropped and scaled with
+    magick flamingo.png -crop 3200x1672+150+1080 +repage -resize 536x280 -strip -quality 84 flamingo-thumb.jpg
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>heic2png banner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=block" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ffffff; --bg2: #f6f8fa; --ink: #1f2328; --muted: #59636e; --line: #d1d9e0; --card: #ffffff;
+    --orange: #bc4c00; --blue: #0969da; --green: #1a7f37; --shadow: 0 1px 2px rgba(31,35,40,.06), 0 6px 18px rgba(31,35,40,.06);
+    --tint1: rgba(188,76,0,.09); --tint2: rgba(9,105,218,.08); --wire: #afb8c1;
+  }
+  .dark {
+    --bg: #0d1117; --bg2: #151b23; --ink: #f0f6fc; --muted: #9198a1; --line: #3d444d; --card: #151b23;
+    --orange: #f0883e; --blue: #4493f8; --green: #3fb950; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+    --tint1: rgba(240,136,62,.14); --tint2: rgba(68,147,248,.12); --wire: #656c76;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; }
+  body { width: 960px; height: 400px; font-family: Inter, "Segoe UI", sans-serif; color: var(--ink); }
+  .frame { position: relative; width: 960px; height: 400px; border-radius: 22px; overflow: hidden;
+           border: 1px solid var(--line);
+           background: radial-gradient(520px 300px at 92% 8%, var(--tint1), transparent 70%),
+                       radial-gradient(420px 260px at 4% 100%, var(--tint2), transparent 70%), var(--bg); }
+  .dots { position: absolute; inset: 0; opacity: .55;
+          background-image: radial-gradient(var(--line) 1px, transparent 1.2px); background-size: 22px 22px;
+          -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 55%, #000 100%); }
+
+  header { position: absolute; left: 44px; top: 38px; display: flex; align-items: center; gap: 18px; }
+  .mark { width: 58px; height: 58px; border-radius: 16px; background: linear-gradient(140deg, #f0883e, #db61a2 55%, #8957e5);
+          display: grid; place-items: center; box-shadow: var(--shadow); }
+  h1 { margin: 0; font-size: 46px; font-weight: 800; letter-spacing: -0.035em; line-height: 1; }
+  .tag { margin: 8px 0 0; font-size: 18px; color: var(--muted); letter-spacing: -0.005em; }
+  .tag b { color: var(--ink); font-weight: 600; }
+
+  .node { position: absolute; background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+          box-shadow: var(--shadow); padding: 14px 16px; }
+  .label { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+           display: flex; align-items: center; gap: 8px; }
+  .label i { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); }
+  .mono { font-family: "JetBrains Mono", Consolas, monospace; font-size: 14.5px; margin-top: 8px; white-space: nowrap; }
+  .sub { font-size: 12.5px; color: var(--muted); margin-top: 6px; white-space: nowrap; }
+  .sub code { font-family: "JetBrains Mono", Consolas, monospace; font-size: 12px; color: var(--ink); }
+  .type { margin-left: auto; font-family: "JetBrains Mono", Consolas, monospace; font-size: 11.5px; letter-spacing: 0;
+          text-transform: none; font-weight: 500; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink); }
+
+  #photo { left: 44px; top: 152px; width: 268px; padding: 0; overflow: hidden; }
+  #photo img { display: block; width: 268px; height: 128px; object-fit: cover; border-bottom: 1px solid var(--line); }
+  #photo .body { padding: 12px 16px 14px; }
+  #photo .label i { background: var(--orange); }
+
+  #cli { left: 352px; top: 188px; width: 276px; padding: 0; overflow: hidden; }
+  #cli .bar { height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--bg2); }
+  #cli .bar span { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+  #cli .body { padding: 14px 16px; }
+  #cli .mono { font-size: 14px; }
+
+  #png, #jpg { left: 668px; width: 248px; }
+  #png { top: 156px; }
+  #jpg { top: 272px; }
+  #png .label i { background: var(--green); }
+  #jpg .label i { background: var(--blue); }
+
+  .pip { position: absolute; right: 44px; top: 44px; font-family: "JetBrains Mono", Consolas, monospace; font-size: 14px;
+         padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); box-shadow: var(--shadow); }
+  .pip span { color: var(--muted); margin-right: 8px; user-select: none; }
+  svg.wires { position: absolute; inset: 0; }
+  .wire { fill: none; stroke: var(--wire); stroke-width: 2; stroke-dasharray: 5 6; }
+  .head { fill: var(--wire); }
+</style>
+</head>
+<body>
+<script>if (location.hash === '#dark') document.documentElement.className = 'dark';</script>
+<div class="frame">
+  <div class="dots"></div>
+
+  <header>
+    <div class="mark">
+      <svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3.5" y="5.5" width="27" height="23" rx="4"/>
+        <path d="M4.5 25.5 L13 16.5 L19 22.5 L22.5 19 L29.5 26"/>
+        <circle cx="23" cy="12" r="2.6" fill="#fff" stroke="none"/>
+      </svg>
+    </div>
+    <div>
+      <h1>heic2png</h1>
+      <p class="tag">iPhone <b>HEIC</b> photos to <b>PNG</b> or <b>JPEG</b>, from the shell or from Python.</p>
+    </div>
+  </header>
+
+  <div class="pip"><span>$</span>pip install heic2png</div>
+
+  <svg class="wires" width="960" height="400">
+    <path class="wire" d="M314 262 H342"/>
+    <path class="head" d="M348 262 l-9 -5 v10 z"/>
+    <path class="wire" d="M630 250 C 650 250, 646 206, 656 206"/>
+    <path class="head" d="M662 206 l-9 -5 v10 z"/>
+    <path class="wire" d="M630 276 C 650 276, 646 322, 656 322"/>
+    <path class="head" d="M662 322 l-9 -5 v10 z"/>
+  </svg>
+
+  <div class="node" id="photo">
+    <img src="flamingo-thumb.jpg" alt="">
+    <div class="body">
+      <div class="label"><i></i>HEIC photo</div>
+      <div class="mono">photo.heic</div>
+      <div class="sub">straight off an iPhone or iPad</div>
+    </div>
+  </div>
+
+  <div class="node" id="cli">
+    <div class="bar"><span></span><span></span><span></span></div>
+    <div class="body">
+      <div class="label"><i></i>Command line or Python</div>
+      <div class="mono">$ heic2png -i photo.heic</div>
+      <div class="sub">or <code>HEIC2PNG("photo.heic").save()</code></div>
+      <div class="sub">pipes: <code>heic2png &lt; a.heic &gt; a.png</code></div>
+    </div>
+  </div>
+
+  <div class="node" id="png">
+    <div class="label"><i></i>PNG <span class="type">-q 100</span></div>
+    <div class="mono">photo.png</div>
+    <div class="sub">every color, transparency kept</div>
+  </div>
+
+  <div class="node" id="jpg">
+    <div class="label"><i></i>JPEG <span class="type">-f jpg</span></div>
+    <div class="mono">photo.jpg</div>
+    <div class="sub">a smaller file for photos</div>
+  </div>
+</div>
+</body>
+</html>
