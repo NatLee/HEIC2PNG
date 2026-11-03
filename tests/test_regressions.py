@@ -1,4 +1,4 @@
-"""Regression tests for behaviour that broke between 1.1.x and 1.2.0."""
+"""Regression tests: each one pins a bug that was fixed (most broke between 1.1.x and 1.2.0)."""
 import subprocess
 import sys
 
@@ -25,6 +25,35 @@ def test_jpeg_output(tmp_path, fmt, mode):
         assert result.mode == "RGB"
         if mode == "RGBA":  # transparent pixels become white, not black
             assert result.getpixel((4, 4)) == pytest.approx((255, 255, 255), abs=3)
+
+
+@pytest.mark.parametrize("quality", [None, 30, 80, 100])
+def test_grayscale_with_alpha_converts_to_png(tmp_path, quality):
+    # Pillow cannot quantize LA images, so every quality below 100 failed with "image has wrong mode".
+    src = tmp_path / "gray-alpha.png"
+    img = Image.new("LA", (16, 16), (128, 255))
+    img.paste((40, 0), (0, 0, 8, 16))  # left half fully transparent
+    img.save(src)
+
+    out = HEIC2PNG(str(src), quality=quality).save(tmp_path / "out.png")
+
+    with Image.open(out) as result:
+        rgba = result.convert("RGBA")
+    assert rgba.getpixel((2, 8))[3] == 0
+    assert rgba.getpixel((12, 8)) == pytest.approx((128, 128, 128, 255), abs=3)
+
+
+@pytest.mark.parametrize("quality", [None, 80])
+def test_cmyk_jpeg_converts_to_png(tmp_path, quality):
+    # PNG has no CMYK mode, so CMYK JPEGs (common from print workflows) failed at any quality.
+    src = tmp_path / "print.jpg"
+    Image.new("CMYK", (16, 16), (0, 255, 255, 0)).save(src)  # red
+
+    out = HEIC2PNG(str(src), quality=quality).save(tmp_path / "out.png")
+
+    with Image.open(out) as result:
+        assert result.format == "PNG"
+        assert result.convert("RGB").getpixel((8, 8)) == pytest.approx((255, 0, 0), abs=12)
 
 
 def test_save_without_path_writes_next_to_input(tmp_path):
@@ -56,26 +85,32 @@ def test_import_does_not_configure_logging():
     assert out.stdout.strip() == "0"
 
 
-def test_cli_still_prints_progress(tmp_path):
-    src = tmp_path / "photo.jpg"
-    Image.new("RGB", (8, 8)).save(src)
-    out = subprocess.run([sys.executable, "-m", "heic2png.cli", "-i", str(src), "-q", "100"],
-                         capture_output=True, text=True)
-    assert out.returncode == 0
-    assert "Successfully saved converted image" in out.stderr
+def test_cli_still_prints_progress(heic2png, tmp_path):
+    Image.new("RGB", (8, 8)).save(tmp_path / "photo.jpg")
+    result = heic2png("-i", "photo.jpg", "-q", 100)
+    assert result.returncode == 0
+    assert b"Successfully saved converted image" in result.stderr
 
 
-def test_stdin_with_output_path_writes_the_file(tmp_path):
+def test_verbose_does_not_print_pillow_debug_messages(heic2png, tmp_path):
+    # --verbose set the root logger to DEBUG, so a PNG input printed lines like "STREAM b'IHDR' 16 13".
+    Image.new("RGB", (8, 8)).save(tmp_path / "photo.png")
+
+    result = heic2png("-i", "photo.png", "-o", "out.png", "--verbose")
+
+    assert result.returncode == 0
+    assert b"Conversion settings:" in result.stderr
+    assert b"STREAM" not in result.stderr
+
+
+def test_stdin_with_output_path_writes_the_file(heic2png, tmp_path):
     # README: `cat image.heic | heic2png -o output.png`; 1.2.0 ignored -o and wrote to stdout.
     src = tmp_path / "photo.png"
     Image.new("RGB", (8, 8), (10, 20, 30)).save(src)
-    out = tmp_path / "out.png"
-    with open(src, "rb") as stdin:
-        result = subprocess.run([sys.executable, "-m", "heic2png.cli", "-o", str(out), "-q", "100"],
-                                stdin=stdin, capture_output=True)
+    result = heic2png("-o", "out.png", "-q", 100, stdin=src)
     assert result.returncode == 0
     assert result.stdout == b""
-    with Image.open(out) as img:
+    with Image.open(tmp_path / "out.png") as img:
         assert img.format == "PNG"
 
 

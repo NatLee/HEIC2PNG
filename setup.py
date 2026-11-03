@@ -45,7 +45,7 @@ setuptools.setup(
     ],
     extras_require={
         'dev': ['check-manifest'],
-        'test': ['pytest', 'numpy'],
+        'test': ['pytest'],
     },
     entry_points={
         'console_scripts': [

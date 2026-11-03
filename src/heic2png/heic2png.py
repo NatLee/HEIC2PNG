@@ -1,183 +1,180 @@
-import os
+"""Convert HEIC images (and PNG/JPEG) to PNG or JPEG with Pillow."""
 import sys
 from pathlib import Path
-from typing import Union, Optional, BinaryIO
+from typing import Any, BinaryIO, Dict, Optional, Union
 
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from pillow_heif import register_heif_opener
 
 register_heif_opener()
 
+ImageSource = Union[str, Path, BinaryIO]
+ImageDestination = Union[Path, BinaryIO]
+
+JPEG_EXTENSIONS = ('.jpg', '.jpeg')
+OUTPUT_EXTENSIONS = ('.png',) + JPEG_EXTENSIONS
+# Modes Pillow can write as PNG; anything else (e.g. CMYK from a JPEG) is converted to RGB first.
+PNG_MODES = ('1', 'L', 'LA', 'I', 'I;16', 'I;16B', 'P', 'RGB', 'RGBA')
+DEFAULT_JPEG_QUALITY = 95
+
+
 class HEIC2PNG:
     """
-    A converter class for converting HEIC images to PNG format.
-    
-    Supports reading from file path or file-like objects and can output to
-    file path or stdout.
+    Convert a HEIC image to PNG (or JPEG).
+
+    The input can be a file path, a binary file-like object or stdin; the output
+    a file path or stdout.
+
+    Example:
+        >>> HEIC2PNG('photo.heic', quality=100).save()  # writes photo.png
     """
-    
+
     SUPPORTED_EXTENSIONS = {'.heic', '.png', '.jpg', '.jpeg'}
 
     def __init__(
         self,
-        image_file_path: Union[str, Path, BinaryIO] = "",
+        image_file_path: ImageSource = "",
         quality: Optional[int] = None,
-        overwrite: bool = False
+        overwrite: bool = False,
     ) -> None:
         """
-        Initialize the HEIC2PNG converter.
+        Open the image to convert.
 
         Args:
-            image_file_path: Path to the HEIC image file, or a file-like object.
-                           If empty, reads from stdin.
-            quality: Quality of the converted PNG image (1-100).
-                    None means no optimization.
-            overwrite: Whether to overwrite existing output files.
+            image_file_path: Path to the image file, or a binary file-like object.
+                If empty, the image is read from stdin.
+            quality: 1-100, or None to keep every color. For PNG output, anything
+                below 100 reduces the image to a palette of at most 256 colors
+                (quality x 2.56). For JPEG output it is the JPEG quality
+                (None means 95).
+            overwrite: Whether save() may replace an existing file.
 
         Raises:
-            ValueError: If quality is not in range 1-100 or file extension is not supported.
-            FileNotFoundError: If the input file doesn't exist.
+            ValueError: If quality is not in 1-100 or the file extension is not supported.
+            FileNotFoundError: If the input file does not exist.
+            IOError: If the input is not an image Pillow can read.
         """
         self._validate_quality(quality)
         self.quality = quality
         self.overwrite = overwrite
-        
-        # Handle input source. input_path is only set when reading from a file path;
-        # save() uses it to derive the default output name.
+
+        # input_path is only set for file paths; save() derives the default output name from it.
         self.input_path: Optional[Path] = None
         if not image_file_path:
-            self.image_file_path = self._get_binary_stdin()
+            self.image_file_path: Union[Path, BinaryIO] = self._binary_stream(sys.stdin)
         elif isinstance(image_file_path, (str, Path)):
-            self.image_file_path = self._validate_input_path(Path(image_file_path))
-            self.input_path = self.image_file_path
+            self.input_path = self._validate_input_path(Path(image_file_path))
+            self.image_file_path = self.input_path
         else:
-            # Assume it's a file-like object
             self.image_file_path = image_file_path
 
         try:
             self.image: Image.Image = Image.open(self.image_file_path)
+        except UnidentifiedImageError as e:
+            raise IOError(
+                f"Failed to open image: {self._describe_input()} is damaged or not a supported image"
+            ) from e
         except Exception as e:
-            raise IOError(f"Failed to open image: {str(e)}") from e
+            raise IOError(f"Failed to open image: {e}") from e
 
     def save(
         self,
         output_image_file_path: Union[str, Path, None] = None,
-        extension: str = '.png'
-    ) -> Path:
+        extension: str = '.png',
+    ) -> ImageDestination:
         """
-        Convert and save the input image to another format.
+        Convert the image and save it.
 
         Args:
-            output_image_file_path: Path to save the converted image.
-                                  If None and the input was a file path, saves next
-                                  to the input with the new extension (e.g. photo.heic
-                                  -> photo.png), as in 1.1.x. If None and the input
-                                  was stdin or a file-like object, writes to stdout.
-            extension: The target file extension (default: '.png')
+            output_image_file_path: Where to save the converted image. If None and the
+                input was a file path, saves next to the input with the new extension
+                (photo.heic -> photo.png). If None and the input was stdin or a
+                file-like object, writes to stdout.
+            extension: Output format: '.png' (default), '.jpg' or '.jpeg'. The leading
+                dot is optional.
 
         Returns:
-            Path: The path where the converted image was saved.
+            The path that was written, or the binary stdout stream.
 
         Raises:
-            ValueError: If the output extension is not supported.
-            IOError: If saving the image fails.
+            ValueError: If the output format is not supported.
+            FileExistsError: If the output file exists and overwrite is False.
+            IOError: If converting or writing the image fails.
         """
-        if not extension.startswith('.'):
-            extension = f'.{extension}'
-        
-        if extension.lower() not in self.SUPPORTED_EXTENSIONS:
-            raise ValueError(f"Unsupported output format: {extension}")
-
-        # Handle output destination
-        if output_image_file_path is None and self.input_path is None:
-            output_path = self._get_binary_stdout()
-        else:
-            output_path = (Path(output_image_file_path) if output_image_file_path is not None
-                           else self.input_path.with_suffix(extension))
-            if output_path.exists() and not self.overwrite:
-                raise FileExistsError(f"Output file already exists: {output_path}")
+        extension = self._normalize_extension(extension)
+        output_path = self._output_path(output_image_file_path, extension)
+        if output_path is not None and output_path.exists() and not self.overwrite:
+            raise FileExistsError(f"Output file already exists: {output_path}")
+        destination = output_path if output_path is not None else self._binary_stream(sys.stdout)
 
         try:
-            # Optimize image if quality is specified
-            image_to_save = self.image
-            if self.quality and self.quality < 100:
-                image_to_save = self._optimize_image_with_pil(self.image, extension)
-            if extension.lower() in ('.jpg', '.jpeg'):
-                image_to_save = self._flatten_for_jpeg(image_to_save)
-
-            # Prepare save parameters based on format and quality
-            save_params = self._get_save_parameters(extension)
-            
-            # Save the image in the target format
-            image_to_save.save(output_path, **save_params)
-
-            return output_path
-
+            image = self._prepare_image(extension)
+            image.save(destination, **self._get_save_parameters(extension))
         except Exception as e:
-            raise IOError(f"Failed to save image: {str(e)}") from e
+            raise IOError(f"Failed to save image: {e}") from e
+        return destination
+
+    @property
+    def _palette_size(self) -> Optional[int]:
+        """How many colors PNG output is reduced to, or None to keep every color (quality None or 100)."""
+        if self.quality is None or self.quality >= 100:
+            return None
+        return max(2, int(self.quality * 2.56))
+
+    def _output_path(
+        self,
+        output_image_file_path: Union[str, Path, None],
+        extension: str,
+    ) -> Optional[Path]:
+        """The file save() writes to, or None when it writes to stdout."""
+        if output_image_file_path is not None:
+            return Path(output_image_file_path)
+        if self.input_path is not None:
+            return self.input_path.with_suffix(extension)
+        return None
+
+    def _prepare_image(self, extension: str) -> Image.Image:
+        """Return the image in a mode the target format can store, with colors reduced if asked."""
+        image = self.image
+        if extension.lower() in JPEG_EXTENSIONS:
+            return self._flatten_for_jpeg(image)
+        if image.mode not in PNG_MODES:
+            image = image.convert('RGB')
+        if self._palette_size is not None:
+            image = self._reduce_colors(image, self._palette_size)
+        return image
 
     @staticmethod
-    def _validate_quality(quality: Optional[int]) -> None:
-        """Validate the quality parameter."""
-        if quality is not None and not (1 <= quality <= 100):
-            raise ValueError("Quality must be between 1 and 100")
+    def _reduce_colors(image: Image.Image, max_colors: int) -> Image.Image:
+        """Quantize to at most max_colors colors, keeping transparency."""
+        if image.mode == 'LA':
+            image = image.convert('RGBA')  # Pillow cannot quantize LA directly
+        if image.mode == 'RGBA':
+            # Fast octree is the method Pillow supports for images with an alpha channel.
+            return image.quantize(colors=max_colors, method=Image.Quantize.FASTOCTREE)
+        if image.mode == 'RGB':
+            return image.quantize(colors=max_colors, method=Image.Quantize.MEDIANCUT)
+        # getcolors() returns None only above 256 colors, which a palette image cannot have.
+        if image.mode == 'P' and len(image.getcolors() or ()) > max_colors:
+            return image.quantize(colors=max_colors, method=Image.Quantize.MEDIANCUT)
+        return image
 
-    @staticmethod
-    def _validate_input_path(path: Path) -> Path:
-        """Validate the input file path."""
-        if not path.exists():
-            raise FileNotFoundError(f"Input file not found: {path}")
-        if path.suffix.lower() not in HEIC2PNG.SUPPORTED_EXTENSIONS:
-            raise ValueError(f"Input file must be a supported image format: {path}")
-        return path
+    def _get_save_parameters(self, extension: str) -> Dict[str, Any]:
+        """Keyword arguments for Image.save() for the given output extension."""
+        if extension.lower() in JPEG_EXTENSIONS:
+            # Pillow knows the format only as "JPEG"; "JPG" raises KeyError.
+            quality = self.quality if self.quality is not None else DEFAULT_JPEG_QUALITY
+            return {'format': 'JPEG', 'quality': quality, 'optimize': True}
+        # With optimize=True Pillow always uses the strongest zlib compression,
+        # so there is no compression level to pass.
+        return {'format': 'PNG', 'optimize': True}
 
-    @staticmethod
-    def _get_binary_stdin() -> BinaryIO:
-        """Get binary stdin handle."""
-        return (os.fdopen(sys.stdin.fileno(), "rb")
-                if "b" not in sys.stdin.mode else sys.stdin)
-
-    @staticmethod
-    def _get_binary_stdout() -> BinaryIO:
-        """Get binary stdout handle."""
-        return (os.fdopen(sys.stdout.fileno(), "wb")
-                if "b" not in sys.stdout.mode else sys.stdout)
-
-    def _get_save_parameters(self, extension: str) -> dict:
-        """
-        Get save parameters based on format and quality settings.
-        
-        Args:
-            extension: File extension (e.g., '.png', '.jpg')
-            
-        Returns:
-            dict: Parameters for PIL Image.save()
-        """
-        # Pillow knows JPEG only as "JPEG"; "JPG" raises KeyError.
-        format_name = {'.jpg': 'JPEG', '.jpeg': 'JPEG'}.get(extension.lower(), extension[1:].upper())
-        params = {'format': format_name}
-        
-        if extension.lower() == '.png':
-            # PNG optimization using PIL's built-in features
-            if self.quality and self.quality < 100:
-                # Convert quality to optimize level (0-9, where 9 is best compression)
-                optimize_level = max(0, min(9, int((100 - self.quality) / 10)))
-                params['optimize'] = True
-                params['compress_level'] = optimize_level
-            else:
-                # Default PNG settings for best quality
-                params['optimize'] = True
-                params['compress_level'] = 6
-                
-        elif extension.lower() in ['.jpg', '.jpeg']:
-            # JPEG quality setting
-            if self.quality:
-                params['quality'] = self.quality
-            else:
-                params['quality'] = 95  # Default high quality
-            params['optimize'] = True
-            
-        return params
+    def _describe_input(self) -> str:
+        """A readable name for the input, for error messages."""
+        if self.input_path is not None:
+            return str(self.input_path)
+        name = getattr(self.image_file_path, 'name', None)  # "<stdin>" for stdin, a path for open files
+        return name if isinstance(name, str) else 'the input stream'
 
     @staticmethod
     def _flatten_for_jpeg(image: Image.Image) -> Image.Image:
@@ -192,37 +189,30 @@ class HEIC2PNG:
         background.paste(rgba, mask=rgba.getchannel('A'))
         return background
 
-    def _optimize_image_with_pil(self, image: Image.Image, extension: str) -> Image.Image:
-        """
-        Optimize image using PIL's built-in features while preserving transparency.
-        
-        Args:
-            image: PIL Image object
-            extension: Target file extension
-            
-        Returns:
-            Image.Image: Optimized image
-        """
-        if extension.lower() == '.png':
-            # For PNG, we can reduce colors if quality is specified
-            if self.quality and self.quality < 100:
-                # Calculate target colors based on quality
-                max_colors = max(2, int(self.quality * 2.56))  # Scale 1-100 to 2-256
-                
-                # Handle different image modes while preserving transparency
-                if image.mode in ['RGBA', 'LA']:
-                    # For images with transparency, use Fast Octree method which supports RGBA
-                    # This preserves transparency while reducing colors
-                    image = image.quantize(colors=max_colors, method=Image.Quantize.FASTOCTREE)
-                    # Keep the quantized image in P mode with transparency
-                    
-                elif image.mode == 'RGB':
-                    # For RGB images without transparency, convert to palette
-                    image = image.quantize(colors=max_colors, method=Image.Quantize.MEDIANCUT)
-                    
-                elif image.mode == 'P':
-                    # Already a palette image, just reduce colors further if needed
-                    if len(image.getcolors()) > max_colors:
-                        image = image.quantize(colors=max_colors, method=Image.Quantize.MEDIANCUT)
-                
-        return image
+    @staticmethod
+    def _normalize_extension(extension: str) -> str:
+        """Add the leading dot if missing and check that the output format is supported."""
+        if not extension.startswith('.'):
+            extension = f'.{extension}'
+        if extension.lower() not in OUTPUT_EXTENSIONS:
+            raise ValueError(f"Unsupported output format: {extension} (use .png, .jpg or .jpeg)")
+        return extension
+
+    @staticmethod
+    def _validate_quality(quality: Optional[int]) -> None:
+        if quality is not None and not 1 <= quality <= 100:
+            raise ValueError(f"Quality must be between 1 and 100, got {quality}")
+
+    @staticmethod
+    def _validate_input_path(path: Path) -> Path:
+        if not path.exists():
+            raise FileNotFoundError(f"Input file not found: {path}")
+        if path.suffix.lower() not in HEIC2PNG.SUPPORTED_EXTENSIONS:
+            supported = ', '.join(sorted(HEIC2PNG.SUPPORTED_EXTENSIONS))
+            raise ValueError(f"Unsupported input file type: {path} (supported: {supported})")
+        return path
+
+    @staticmethod
+    def _binary_stream(stream: Any) -> BinaryIO:
+        """The binary layer of a text stream such as sys.stdin; binary streams pass through."""
+        return getattr(stream, 'buffer', stream)

@@ -1,6 +1,7 @@
 # Custom files
 
 *.png
+!docs/images/*.png
 
 # Trash by OS
 .DS_Store
