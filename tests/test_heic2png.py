@@ -1,4 +1,5 @@
 """Tests for the HEIC2PNG converter class."""
+import io
 import sys
 
 import pytest
@@ -9,14 +10,63 @@ from heic2png import HEIC2PNG
 from .images import noise, transparent_noise
 
 
-def test_lower_quality_gives_a_smaller_png(tmp_path):
-    src = tmp_path / "noise.heic"
-    noise("RGB", (200, 200)).save(src)
+@pytest.fixture
+def rgb_png(tmp_path):
+    """A 64x64 PNG with random colors."""
+    path = tmp_path / "noise.png"
+    noise("RGB").save(path)
+    return path
 
-    full = HEIC2PNG(str(src), quality=None).save(tmp_path / "full.png")
-    reduced = HEIC2PNG(str(src), quality=10).save(tmp_path / "reduced.png")
 
-    assert reduced.stat().st_size < full.stat().st_size
+# --- input -------------------------------------------------------------------
+
+@pytest.mark.parametrize("quality", [0, 101, -5])
+def test_rejects_quality_outside_1_to_100(rgb_png, quality):
+    with pytest.raises(ValueError, match="between 1 and 100"):
+        HEIC2PNG(str(rgb_png), quality=quality)
+
+
+@pytest.mark.parametrize("quality", [None, 1, 100])
+def test_accepts_quality_none_and_the_range_ends(rgb_png, quality):
+    assert HEIC2PNG(str(rgb_png), quality=quality).quality == quality
+
+
+def test_missing_input_file(tmp_path):
+    with pytest.raises(FileNotFoundError, match="Input file not found"):
+        HEIC2PNG(str(tmp_path / "missing.heic"))
+
+
+def test_unsupported_input_file_type(tmp_path):
+    src = tmp_path / "picture.gif"
+    noise("RGB").save(src)
+    with pytest.raises(ValueError, match=r"Unsupported input file type: .*picture\.gif \(supported: "):
+        HEIC2PNG(str(src))
+
+
+def test_damaged_input_file(tmp_path):
+    src = tmp_path / "broken.heic"
+    src.write_bytes(b"this is not an image")
+    with pytest.raises(IOError, match=r"Failed to open image: .*broken\.heic is damaged or not a supported image"):
+        HEIC2PNG(str(src))
+
+
+def test_other_open_errors_are_reported_as_io_errors(tmp_path):
+    folder = tmp_path / "folder.heic"
+    folder.mkdir()
+    with pytest.raises(IOError, match="Failed to open image: "):
+        HEIC2PNG(str(folder))
+
+
+def test_damaged_input_stream():
+    with pytest.raises(IOError, match="Failed to open image: the input stream is damaged"):
+        HEIC2PNG(io.BytesIO(b"this is not an image"))
+
+
+def test_accepts_path_objects_and_file_objects(rgb_png, tmp_path):
+    from_path = HEIC2PNG(rgb_png).save(tmp_path / "a.png")
+    with open(rgb_png, "rb") as f:
+        from_file = HEIC2PNG(f).save(tmp_path / "b.png")
+    assert from_path.read_bytes() == from_file.read_bytes()
 
 
 def test_reads_stdin_and_writes_stdout(sample_heic, tmp_path, monkeypatch):
@@ -30,6 +80,143 @@ def test_reads_stdin_and_writes_stdout(sample_heic, tmp_path, monkeypatch):
         assert img.format == "PNG"
         assert img.size == (4032, 3024)
 
+
+def test_uses_the_binary_layer_of_text_stdin_and_stdout(rgb_png, monkeypatch, capsysbinary):
+    # The real sys.stdin/sys.stdout are text streams; the image data must go through .buffer.
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(rgb_png.read_bytes())))
+
+    result = HEIC2PNG("").save()
+
+    assert result is sys.stdout.buffer
+    assert capsysbinary.readouterr().out.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_file_object_without_output_path_writes_stdout(rgb_png, capsysbinary):
+    with open(rgb_png, "rb") as f:
+        HEIC2PNG(f).save()
+    assert capsysbinary.readouterr().out.startswith(b"\x89PNG")
+
+
+# --- output ------------------------------------------------------------------
+
+def test_save_without_path_writes_next_to_the_input_with_the_new_extension(tmp_path):
+    src = tmp_path / "photo.heic"
+    noise("RGB").save(src)
+
+    assert HEIC2PNG(str(src)).save() == tmp_path / "photo.png"
+    assert HEIC2PNG(str(src)).save(extension=".jpg") == tmp_path / "photo.jpg"
+
+
+@pytest.mark.parametrize("extension, suffix, image_format", [
+    ("png", ".png", "PNG"),
+    ("jpg", ".jpg", "JPEG"),
+    (".PNG", ".PNG", "PNG"),
+    (".JPEG", ".JPEG", "JPEG"),
+])
+def test_extension_dot_is_optional_and_case_is_kept(tmp_path, extension, suffix, image_format):
+    src = tmp_path / "photo.heic"
+    noise("RGB").save(src)
+
+    out = HEIC2PNG(str(src)).save(extension=extension)
+
+    assert out.name == "photo" + suffix
+    with Image.open(out) as img:
+        assert img.format == image_format
+
+
+@pytest.mark.parametrize("extension", [".gif", ".heic", "webp"])
+def test_unsupported_output_format(rgb_png, tmp_path, extension):
+    with pytest.raises(ValueError, match="Unsupported output format"):
+        HEIC2PNG(str(rgb_png)).save(tmp_path / "out", extension=extension)
+    assert list(tmp_path.iterdir()) == [rgb_png]
+
+
+def test_existing_output_needs_overwrite(rgb_png, tmp_path):
+    out = tmp_path / "out.png"
+    out.write_bytes(b"keep me")
+
+    with pytest.raises(FileExistsError, match="Output file already exists"):
+        HEIC2PNG(str(rgb_png)).save(out)
+    assert out.read_bytes() == b"keep me"
+
+    HEIC2PNG(str(rgb_png), overwrite=True).save(out)
+    assert out.read_bytes().startswith(b"\x89PNG")
+
+
+def test_write_errors_are_reported_as_io_errors(rgb_png, tmp_path):
+    with pytest.raises(IOError, match="Failed to save image"):
+        HEIC2PNG(str(rgb_png)).save(tmp_path / "no-such-dir" / "out.png")
+
+
+def test_jpeg_quality_defaults_to_95(rgb_png, tmp_path):
+    out = HEIC2PNG(str(rgb_png)).save(tmp_path / "out.jpg", extension=".jpg")
+
+    expected = io.BytesIO()
+    with Image.open(rgb_png) as original:
+        original.save(expected, "JPEG", quality=95, optimize=True)
+    assert out.read_bytes() == expected.getvalue()
+
+
+def test_jpeg_quality_is_passed_through(rgb_png, tmp_path):
+    high = HEIC2PNG(str(rgb_png)).save(tmp_path / "high.jpg", extension=".jpg")
+    low = HEIC2PNG(str(rgb_png), quality=30).save(tmp_path / "low.jpg", extension=".jpg")
+    assert low.stat().st_size < high.stat().st_size
+
+
+# --- quality and colors ------------------------------------------------------
+
+def test_lower_quality_gives_a_smaller_png(tmp_path):
+    src = tmp_path / "noise.heic"
+    noise("RGB", (200, 200)).save(src)
+
+    full = HEIC2PNG(str(src), quality=None).save(tmp_path / "full.png")
+    reduced = HEIC2PNG(str(src), quality=10).save(tmp_path / "reduced.png")
+
+    assert reduced.stat().st_size < full.stat().st_size
+
+
+@pytest.mark.parametrize("quality", [None, 100])
+def test_quality_none_and_100_keep_every_pixel(rgb_png, tmp_path, quality):
+    out = HEIC2PNG(str(rgb_png), quality=quality).save(tmp_path / "out.png")
+
+    with Image.open(out) as result, Image.open(rgb_png) as original:
+        assert result.mode == "RGB"
+        assert result.tobytes() == original.tobytes()
+
+
+@pytest.mark.parametrize("quality, max_colors", [(1, 2), (50, 128), (80, 204), (99, 253)])
+def test_quality_below_100_limits_the_palette(rgb_png, tmp_path, quality, max_colors):
+    out = HEIC2PNG(str(rgb_png), quality=quality).save(tmp_path / "out.png")
+
+    with Image.open(out) as img:
+        assert img.mode == "P"
+        assert 2 <= len(img.getcolors()) <= max_colors
+
+
+def test_palette_input_is_reduced_further_only_when_needed(tmp_path):
+    src = tmp_path / "palette.png"
+    noise("RGB").quantize(64).save(src)
+
+    reduced = HEIC2PNG(str(src), quality=10).save(tmp_path / "reduced.png")  # at most 25 colors
+    kept = HEIC2PNG(str(src), quality=50).save(tmp_path / "kept.png")  # 128 allowed, 64 used
+
+    with Image.open(reduced) as img:
+        assert len(img.getcolors()) <= 25
+    with Image.open(kept) as img, Image.open(src) as original:
+        assert img.convert("RGB").tobytes() == original.convert("RGB").tobytes()
+
+
+def test_grayscale_is_not_turned_into_a_palette(tmp_path):
+    src = tmp_path / "gray.png"
+    noise("L").save(src)
+
+    out = HEIC2PNG(str(src), quality=50).save(tmp_path / "out.png")
+
+    with Image.open(out) as img:
+        assert img.mode == "L"
+
+
+# --- transparency ------------------------------------------------------------
 
 def test_reduced_png_keeps_transparency(tmp_path):
     src = tmp_path / "transparent.png"
