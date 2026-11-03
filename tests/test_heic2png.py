@@ -299,3 +299,45 @@ def test_reduced_png_keeps_alpha_values(tmp_path, image, quality, expected_alpha
     # Exact: a few alpha levels fit easily into the palette (checked with Pillow 10.4 and 13.0)
     for y, alpha in expected_alpha.items():
         assert rgba.getpixel((50, y))[3] == alpha
+
+
+# --- which format save() writes ------------------------------------------------
+# One rule, shared with the command: the extension argument (-f) picks the format; without it,
+# the output file name's extension does; without either, PNG. A file name may have no extension
+# or one of the same format; anything else is refused, so a file never claims another format.
+
+@pytest.mark.parametrize("name, extension, image_format", [
+    ("out.png", None, "PNG"),
+    ("out.jpg", None, "JPEG"),
+    ("out.jpeg", None, "JPEG"),
+    ("OUT.JPG", None, "JPEG"),
+    ("out", None, "PNG"),
+    ("out", ".jpg", "JPEG"),
+    ("out.jpeg", "jpg", "JPEG"),
+    ("out.jpg", ".jpeg", "JPEG"),
+    ("out.png", ".png", "PNG"),
+])
+def test_output_format_follows_the_rule(rgb_png, tmp_path, name, extension, image_format):
+    out = HEIC2PNG(str(rgb_png)).save(tmp_path / name, extension=extension)
+    assert out == tmp_path / name
+    with Image.open(out) as img:
+        assert img.format == image_format
+
+
+@pytest.mark.parametrize("name, extension, message", [
+    ("out.heic", None, r"Cannot write \.heic files"),
+    ("out.HEIF", None, r"Cannot write \.HEIF files"),
+    ("out.webp", None, r"Cannot write \.webp files"),
+    ("out.txt", ".png", r"Cannot write \.txt files"),
+    ("out.jpg", ".png", r"out\.jpg is a JPEG file name, but the output format asked for is PNG"),
+    ("out.png", "jpeg", r"out\.png is a PNG file name, but the output format asked for is JPEG"),
+])
+def test_output_names_that_do_not_match_are_refused(rgb_png, tmp_path, name, extension, message):
+    with pytest.raises(ValueError, match=message):
+        HEIC2PNG(str(rgb_png)).save(tmp_path / name, extension=extension)
+    assert list(tmp_path.iterdir()) == [rgb_png]  # nothing written
+
+
+def test_refused_output_names_list_what_can_be_written(rgb_png, tmp_path):
+    with pytest.raises(ValueError, match=r"heic2png writes PNG or JPEG \(\.png, \.jpg or \.jpeg\)"):
+        HEIC2PNG(str(rgb_png)).save(tmp_path / "out.heic")
