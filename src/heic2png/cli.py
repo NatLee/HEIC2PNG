@@ -238,7 +238,7 @@ def cli(argv: Optional[Sequence[str]] = None) -> int:
         if args.verbose:
             import traceback
             logger.error(traceback.format_exc())
-        logger.error("Please report this issue: https://github.com/NatLee/HEIC2PNG/issues")
+        logger.error("Please report this issue: https://github.com/NatLee/heic2png/issues")
         return 1
 
 def main() -> NoReturn:
