@@ -1,10 +1,10 @@
-import sys
-import logging
+"""The ``heic2png`` command."""
 import argparse
+import logging
+import sys
+import traceback
 from pathlib import Path
-from typing import Optional, Sequence, NoReturn
-
-from pillow_heif import register_heif_opener
+from typing import BinaryIO, NoReturn, Optional, Sequence, Union
 
 from heic2png import __version__
 from heic2png.heic2png import HEIC2PNG
@@ -13,237 +13,214 @@ from heic2png.heic2png import HEIC2PNG
 # does not change the logging setup of the program that imports it.
 logger = logging.getLogger(__name__)
 
-class CLIError(Exception):
-    """Custom exception for CLI errors."""
-    pass
-
-def setup_parser() -> argparse.ArgumentParser:
-    """
-    Create and configure the argument parser.
-
-    Returns:
-        argparse.ArgumentParser: Configured argument parser
-    """
-    parser = argparse.ArgumentParser(
-        description="Convert HEIC images to PNG format.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+PROG = "heic2png"
+ISSUES_URL = "https://github.com/NatLee/heic2png/issues"
+EPILOG = """
 Examples:
-  %(prog)s -i image.heic -o output.png
-  %(prog)s -i image.heic -o output.png -q 80
-  %(prog)s -i image.heic -o output.png -w
-  cat image.heic | %(prog)s > output.png
+  %(prog)s -i photo.heic                    writes photo.png next to photo.heic
+  %(prog)s -i photo.heic -o out.png -q 100  keeps every color
+  %(prog)s -i photo.heic -f jpg             writes photo.jpg
+  cat photo.heic | %(prog)s > photo.png     stdin to stdout, no messages
 
 Notes:
-  - If no input (-i) is specified, input is read from stdin
-  - If no output (-o) is specified, output is written to stdout
-  - Quality setting only applies to PNG output format
-        """
+  - Without -i, the image is read from stdin.
+  - Without -o, the output goes next to the input file, or to stdout when
+    reading from stdin.
+  - Below quality 100, PNG output is reduced to at most 256 colors.
+    For JPEG output, quality is the usual JPEG quality.
+  - Messages go to stderr, so stdout only ever carries image data.
+"""
+
+
+class CLIError(Exception):
+    """An error meant for the user: cli() prints the message and exits with status 1."""
+
+
+def _quality(value: str) -> int:
+    """argparse type for --quality: a whole number from 1 to 100."""
+    try:
+        quality = int(value)
+    except ValueError:
+        quality = 0
+    if not 1 <= quality <= 100:
+        raise argparse.ArgumentTypeError(f"must be a whole number from 1 to 100, got {value!r}")
+    return quality
+
+
+def setup_parser() -> argparse.ArgumentParser:
+    """Create the argument parser for the heic2png command."""
+    parser = argparse.ArgumentParser(
+        prog=PROG,
+        description="Convert HEIC images to PNG format.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=EPILOG,
     )
-    
-    input_group = parser.add_argument_group('Input/Output Options')
-    input_group.add_argument(
+
+    io_group = parser.add_argument_group('Input/Output Options')
+    io_group.add_argument(
         "-i", "--input-path",
+        type=Path,
         help="Path to the input HEIC image (if not specified, reads from stdin)",
-        type=Path
     )
-    input_group.add_argument(
+    io_group.add_argument(
         "-o", "--output-path",
-        help="Path to save the converted image",
-        type=Path
+        type=Path,
+        help="Path to save the converted image (default: next to the input file, "
+             "or stdout when reading from stdin)",
     )
-    
+
     conversion_group = parser.add_argument_group('Conversion Options')
     conversion_group.add_argument(
         "-q", "--quality",
-        type=int,
+        type=_quality,
+        default=80,
+        metavar="QUALITY",
         help="Quality of the converted image (1-100), default: 80. "
              "Below 100, PNG output is reduced to a palette of at most 256 colors; "
              "use 100 to keep every color.",
-        metavar="QUALITY",
-        choices=range(1, 101),
-        default=80,
     )
     conversion_group.add_argument(
         "-f", "--format",
         choices=['png', 'jpg', 'jpeg'],
         default='png',
-        help="Output format (default: png)"
+        help="Output format (default: png)",
     )
-    
+
     behavior_group = parser.add_argument_group('Behavior Options')
     behavior_group.add_argument(
         "-w", "--overwrite",
         action="store_true",
-        help="Overwrite existing output file"
+        help="Overwrite existing output file",
     )
     behavior_group.add_argument(
         "--quiet",
         action="store_true",
-        help="Suppress non-error messages"
+        help="Suppress non-error messages",
     )
     behavior_group.add_argument(
         "-v", "--verbose",
         action="store_true",
-        help="Show detailed processing information"
+        help="Show detailed processing information",
     )
     behavior_group.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {__version__}"
+        version=f"%(prog)s {__version__}",
     )
-    
+
     return parser
 
+
 def is_stream_mode(args: argparse.Namespace) -> bool:
-    """
-    Determine if we're in stream mode (stdin/stdout).
-    
-    Args:
-        args: Parsed command line arguments
-        
-    Returns:
-        bool: True if in stream mode, False otherwise
-    """
-    # Stream mode: no input file specified (reading from stdin)
+    """Stream mode means reading from stdin; it prints no progress messages."""
     return args.input_path is None
 
 
 def validate_args(args: argparse.Namespace) -> None:
     """
-    Validate command line arguments.
-
-    Args:
-        args: Parsed command line arguments
+    Check combinations argparse cannot check by itself.
 
     Raises:
-        CLIError: If arguments are invalid
+        CLIError: If the arguments cannot work together.
     """
     if args.input_path is None and sys.stdin.isatty():
-        raise CLIError("No input file specified and no data on stdin")
-
-    if args.quality is not None and not 1 <= args.quality <= 100:
-        raise CLIError("Quality must be between 1 and 100")
-
+        raise CLIError("No input: give a file with -i, or pipe an image into stdin (see --help)")
     if args.quiet and args.verbose:
-        raise CLIError("Cannot specify both --quiet and --verbose")
+        raise CLIError("--quiet and --verbose cannot be used together")
 
-def process_image(args: argparse.Namespace) -> Optional[Path]:
+
+def process_image(args: argparse.Namespace) -> Union[Path, BinaryIO]:
     """
-    Process the image according to command line arguments.
-
-    Args:
-        args: Parsed command line arguments
+    Convert the image as the parsed arguments ask.
 
     Returns:
-        Optional[Path]: Path to the output file if successful
+        The path of the converted image, or the binary stdout stream it was written to.
 
     Raises:
-        CLIError: If processing fails
+        CLIError: If the input cannot be read or the output cannot be written.
     """
+    extension = f".{args.format}"
     try:
-        # Convert None to empty string for stdin reading
-        input_path = args.input_path if args.input_path is not None else ""
-        
         converter = HEIC2PNG(
-            image_file_path=input_path,
+            image_file_path=args.input_path if args.input_path is not None else "",
             quality=args.quality,
-            overwrite=args.overwrite
+            overwrite=args.overwrite,
         )
-        
-        # Determine if we're in stream mode
-        stream_mode = is_stream_mode(args)
-        
-        # Handle output path logic: -o always wins, also when reading from stdin
-        if args.output_path is not None:
-            output_path = args.output_path
-        elif stream_mode:
-            # Stream mode without -o: output to stdout
-            output_path = None
-        else:
-            # Regular mode with input file but no output file: generate default name
-            input_file = Path(args.input_path)
-            output_path = input_file.with_suffix(f".{args.format}")
-        
-        # Only show info messages if not in stream mode
-        if not stream_mode and not args.quiet:  
-            logger.info("Converting image...")
-            
-        if not stream_mode and args.verbose:
-            logger.info("Conversion settings:")
-            logger.info(f"Input: {args.input_path}")
-            logger.info(f"Output: {output_path}")
-            logger.info(f"Quality: {args.quality or 'default'}")
-            logger.info(f"Format: {args.format}")
-            logger.info(f"Overwrite: {args.overwrite}")
-
-        result_path = converter.save(
-            output_image_file_path=output_path,
-            extension=f".{args.format}"
-        )
-        
-        # Only show success message if not in stream mode and not outputting to stdout
-        if not stream_mode and output_path is not None and not args.quiet:
-            logger.info(f"Successfully saved converted image to: {result_path}")
-        
-        return result_path
-
-    except FileExistsError:
-        raise CLIError(
-            "Output file already exists. Use -w/--overwrite to force overwrite."
-        )
-    except ValueError as e:
-        raise CLIError(f"Invalid input: {str(e)}")
-    except Exception as e:
-        logger.error("Unexpected error occurred during conversion:")
-        logger.error(str(e))
+        logger.info("Converting image...")
         if args.verbose:
-            import traceback
-            logger.error(traceback.format_exc())
-        raise CLIError("Conversion failed. Use --verbose for more details.")
+            _log_settings(args, converter._output_path(args.output_path, extension))
+        result = converter.save(args.output_path, extension=extension)
+    except FileExistsError as e:
+        raise CLIError(f"{e}. Use -w/--overwrite to replace it.") from e
+    except (OSError, ValueError) as e:
+        raise CLIError(str(e)) from e
+
+    if isinstance(result, Path):
+        logger.info(f"Successfully saved converted image to: {result}")
+    return result
+
 
 def cli(argv: Optional[Sequence[str]] = None) -> int:
     """
-    Main CLI entry point.
+    Run the heic2png command.
 
     Args:
-        argv: Command line arguments (defaults to sys.argv[1:])
+        argv: Command line arguments (defaults to sys.argv[1:]).
 
     Returns:
-        int: Exit code (0 for success, non-zero for error)
+        The exit status: 0 on success, 1 on error, 130 when interrupted.
     """
-    parser = setup_parser()
-    args = parser.parse_args(argv)
-
-    logging.basicConfig(format='%(message)s', level=logging.INFO, stream=sys.stderr)
-    # --verbose only adds INFO lines of our own; a DEBUG level would also print Pillow's internals.
-    if args.quiet:
-        logging.getLogger().setLevel(logging.WARNING)
+    args = setup_parser().parse_args(argv)
+    _configure_logging(quiet=args.quiet or is_stream_mode(args))
 
     try:
         validate_args(args)
         process_image(args)
         return 0
     except CLIError as e:
-        logger.error(str(e))
+        logger.error(f"{PROG}: error: {e}")
+        if args.verbose and e.__cause__ is not None:
+            _log_traceback(e.__cause__)
         return 1
     except KeyboardInterrupt:
         logger.error("\nOperation cancelled by user")
         return 130
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
+    except Exception as e:  # a bug in heic2png or a library: ask for a report
+        logger.error(f"{PROG}: unexpected error: {e}")
         if args.verbose:
-            import traceback
-            logger.error(traceback.format_exc())
-        logger.error("Please report this issue: https://github.com/NatLee/heic2png/issues")
+            _log_traceback(e)
+        logger.error(f"Please report this issue: {ISSUES_URL}")
         return 1
 
+
 def main() -> NoReturn:
-    """
-    Script entry point that exits with the appropriate status code.
-    """
-    register_heif_opener()
+    """Entry point of the heic2png console script."""
     sys.exit(cli())
+
+
+def _configure_logging(quiet: bool) -> None:
+    """
+    Print the command's messages to stderr as plain lines.
+
+    Only this module's logger gets a level, so other libraries keep their own
+    (Pillow's debug messages stay hidden, also with --verbose).
+    """
+    logging.basicConfig(format='%(message)s', stream=sys.stderr)
+    logger.setLevel(logging.WARNING if quiet else logging.INFO)
+
+
+def _log_settings(args: argparse.Namespace, output_path: Optional[Path]) -> None:
+    logger.info("Conversion settings:")
+    logger.info(f"Input: {args.input_path}")
+    logger.info(f"Output: {output_path if output_path is not None else 'stdout'}")
+    logger.info(f"Quality: {args.quality}")
+    logger.info(f"Format: {args.format}")
+    logger.info(f"Overwrite: {args.overwrite}")
+
+
+def _log_traceback(error: BaseException) -> None:
+    logger.error(''.join(traceback.format_exception(type(error), error, error.__traceback__)).rstrip())
+
 
 if __name__ == "__main__":
     main()

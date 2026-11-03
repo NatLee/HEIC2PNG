@@ -85,13 +85,11 @@ def test_import_does_not_configure_logging():
     assert out.stdout.strip() == "0"
 
 
-def test_cli_still_prints_progress(tmp_path):
-    src = tmp_path / "photo.jpg"
-    Image.new("RGB", (8, 8)).save(src)
-    out = subprocess.run([sys.executable, "-m", "heic2png.cli", "-i", str(src), "-q", "100"],
-                         capture_output=True, text=True)
-    assert out.returncode == 0
-    assert "Successfully saved converted image" in out.stderr
+def test_cli_still_prints_progress(heic2png, tmp_path):
+    Image.new("RGB", (8, 8)).save(tmp_path / "photo.jpg")
+    result = heic2png("-i", "photo.jpg", "-q", 100)
+    assert result.returncode == 0
+    assert b"Successfully saved converted image" in result.stderr
 
 
 def test_verbose_does_not_print_pillow_debug_messages(heic2png, tmp_path):
@@ -105,17 +103,14 @@ def test_verbose_does_not_print_pillow_debug_messages(heic2png, tmp_path):
     assert b"STREAM" not in result.stderr
 
 
-def test_stdin_with_output_path_writes_the_file(tmp_path):
+def test_stdin_with_output_path_writes_the_file(heic2png, tmp_path):
     # README: `cat image.heic | heic2png -o output.png`; 1.2.0 ignored -o and wrote to stdout.
     src = tmp_path / "photo.png"
     Image.new("RGB", (8, 8), (10, 20, 30)).save(src)
-    out = tmp_path / "out.png"
-    with open(src, "rb") as stdin:
-        result = subprocess.run([sys.executable, "-m", "heic2png.cli", "-o", str(out), "-q", "100"],
-                                stdin=stdin, capture_output=True)
+    result = heic2png("-o", "out.png", "-q", 100, stdin=src)
     assert result.returncode == 0
     assert result.stdout == b""
-    with Image.open(out) as img:
+    with Image.open(tmp_path / "out.png") as img:
         assert img.format == "PNG"
 
 
