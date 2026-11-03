@@ -1,5 +1,27 @@
 """Regression tests for behaviour that broke between 1.1.x and 1.2.0."""
+import pytest
+from PIL import Image
+
+from heic2png import HEIC2PNG
 from heic2png.cli import setup_parser
+
+
+@pytest.mark.parametrize("fmt", ["jpg", "jpeg"])
+@pytest.mark.parametrize("mode", ["RGB", "RGBA"])
+def test_jpeg_output(tmp_path, fmt, mode):
+    # 1.2.0 passed "JPG" to Pillow (unknown format) and could not save transparent images as JPEG.
+    src = tmp_path / "in.png"
+    color = (255, 0, 0) if mode == "RGB" else (255, 0, 0, 0)  # RGBA: fully transparent red
+    Image.new(mode, (8, 8), color).save(src)
+    out = tmp_path / f"out.{fmt}"
+
+    HEIC2PNG(str(src), quality=None).save(out, extension=f".{fmt}")
+
+    with Image.open(out) as result:
+        assert result.format == "JPEG"
+        assert result.mode == "RGB"
+        if mode == "RGBA":  # transparent pixels become white, not black
+            assert result.getpixel((4, 4)) == pytest.approx((255, 255, 255), abs=3)
 
 
 def test_short_q_sets_quality():

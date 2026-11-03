@@ -95,7 +95,9 @@ class HEIC2PNG:
             image_to_save = self.image
             if self.quality and self.quality < 100:
                 image_to_save = self._optimize_image_with_pil(self.image, extension)
-            
+            if extension.lower() in ('.jpg', '.jpeg'):
+                image_to_save = self._flatten_for_jpeg(image_to_save)
+
             # Prepare save parameters based on format and quality
             save_params = self._get_save_parameters(extension)
             
@@ -144,7 +146,8 @@ class HEIC2PNG:
         Returns:
             dict: Parameters for PIL Image.save()
         """
-        format_name = extension[1:].upper()
+        # Pillow knows JPEG only as "JPEG"; "JPG" raises KeyError.
+        format_name = {'.jpg': 'JPEG', '.jpeg': 'JPEG'}.get(extension.lower(), extension[1:].upper())
         params = {'format': format_name}
         
         if extension.lower() == '.png':
@@ -168,6 +171,19 @@ class HEIC2PNG:
             params['optimize'] = True
             
         return params
+
+    @staticmethod
+    def _flatten_for_jpeg(image: Image.Image) -> Image.Image:
+        """
+        JPEG has no alpha channel, so Pillow refuses to save RGBA/LA/P images as JPEG.
+        Composite such images onto a white background; RGB/L/CMYK pass through.
+        """
+        if image.mode in ('RGB', 'L', 'CMYK'):
+            return image
+        rgba = image.convert('RGBA')
+        background = Image.new('RGB', rgba.size, (255, 255, 255))
+        background.paste(rgba, mask=rgba.getchannel('A'))
+        return background
 
     def _optimize_image_with_pil(self, image: Image.Image, extension: str) -> Image.Image:
         """
