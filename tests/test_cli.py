@@ -51,6 +51,13 @@ def test_options_and_defaults_are_unchanged():
     assert (args.quality, args.format, args.overwrite, args.quiet, args.verbose) == (80, "png", False, False, False)
 
 
+def test_usage_line_matches_the_readme():
+    # The README quotes this line; -f's choices come from the converter's output formats
+    usage = " ".join(setup_parser().format_usage().split())
+    assert usage == "usage: heic2png [-h] [-i INPUT_PATH] [-o OUTPUT_PATH] [-q QUALITY] " \
+                    "[-f {png,jpg,jpeg}] [-w] [--quiet] [-v] [--version]"
+
+
 def test_help_describes_where_the_output_goes():
     text = setup_parser().format_help()
     assert "Without -o, the output goes next to the input file" in text

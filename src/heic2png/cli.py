@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import BinaryIO, NoReturn, Optional, Sequence, Union
 
 from heic2png import __version__
-from heic2png.heic2png import HEIC2PNG
+from heic2png.heic2png import HEIC2PNG, OUTPUT_EXTENSIONS
 
 # Logging is configured in cli(), not at import time, so `import heic2png`
 # does not change the logging setup of the program that imports it.
@@ -81,9 +81,9 @@ def setup_parser() -> argparse.ArgumentParser:
     )
     conversion_group.add_argument(
         "-f", "--format",
-        choices=['png', 'jpg', 'jpeg'],
+        choices=[extension.lstrip('.') for extension in OUTPUT_EXTENSIONS],
         default='png',
-        help="Output format (default: png)",
+        help="Output format (default: %(default)s)",
     )
 
     behavior_group = parser.add_argument_group('Behavior Options')

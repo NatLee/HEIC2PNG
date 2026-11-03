@@ -1,7 +1,9 @@
 """Convert HEIC images (and PNG/JPEG) to PNG or JPEG with Pillow."""
+import functools
+import io
 import sys
 from pathlib import Path
-from typing import Any, BinaryIO, Dict, Optional, Union
+from typing import Any, BinaryIO, Dict, Optional, Sequence, Union
 
 from PIL import Image, UnidentifiedImageError
 from pillow_heif import register_heif_opener
@@ -12,10 +14,34 @@ ImageSource = Union[str, Path, BinaryIO]
 ImageDestination = Union[Path, BinaryIO]
 
 JPEG_EXTENSIONS = ('.jpg', '.jpeg')
-OUTPUT_EXTENSIONS = ('.png',) + JPEG_EXTENSIONS
-# Modes Pillow can write as PNG; anything else (e.g. CMYK from a JPEG) is converted to RGB first.
-PNG_MODES = ('1', 'L', 'LA', 'I', 'I;16', 'I;16B', 'P', 'RGB', 'RGBA')
+#: Output extension -> Pillow format name. This table decides what save() can write; the input
+#: types, the error messages and the command's -f choices all come from it. Pillow knows JPEG
+#: only as "JPEG" ("JPG" raises KeyError).
+OUTPUT_FORMATS = {'.png': 'PNG', **dict.fromkeys(JPEG_EXTENSIONS, 'JPEG')}
+OUTPUT_EXTENSIONS = tuple(OUTPUT_FORMATS)
+# Modes saved as JPEG as they are; anything else is flattened onto white, because JPEG has no
+# transparency. (PNG output asks Pillow instead, see _pillow_writes.)
+JPEG_MODES = ('L', 'RGB', 'CMYK')
 DEFAULT_JPEG_QUALITY = 95
+
+
+@functools.lru_cache(maxsize=None)
+def _pillow_writes(image_format: str, mode: str) -> bool:
+    """Whether Pillow can save images of this mode in this format as they are.
+
+    Asks Pillow, with a 1x1 image, instead of keeping a copy of its tables: they change between
+    versions (Pillow 10.4 writes mode I as PNG, Pillow 13 does not).
+    """
+    try:
+        Image.new(mode, (1, 1)).save(io.BytesIO(), image_format)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _join_or(items: Sequence[str]) -> str:
+    """'.png, .jpg or .jpeg' from ('.png', '.jpg', '.jpeg'), for messages."""
+    return ', '.join(items[:-1]) + ' or ' + items[-1]
 
 
 class HEIC2PNG:
@@ -29,7 +55,8 @@ class HEIC2PNG:
         >>> HEIC2PNG('photo.heic', quality=100).save()  # writes photo.png
     """
 
-    SUPPORTED_EXTENSIONS = {'.heic', '.png', '.jpg', '.jpeg'}
+    # Input types: HEIC, and every format heic2png can write
+    SUPPORTED_EXTENSIONS = {'.heic', *OUTPUT_EXTENSIONS}
 
     def __init__(
         self,
@@ -102,14 +129,15 @@ class HEIC2PNG:
             IOError: If converting or writing the image fails.
         """
         extension = self._normalize_extension(extension)
+        image_format = OUTPUT_FORMATS[extension.lower()]
         output_path = self._output_path(output_image_file_path, extension)
         if output_path is not None and output_path.exists() and not self.overwrite:
             raise FileExistsError(f"Output file already exists: {output_path}")
         destination = output_path if output_path is not None else self._binary_stream(sys.stdout)
 
         try:
-            image = self._prepare_image(extension)
-            image.save(destination, **self._get_save_parameters(extension))
+            image = self._prepare_image(image_format)
+            image.save(destination, **self._get_save_parameters(image_format))
         except Exception as e:
             raise IOError(f"Failed to save image: {e}") from e
         return destination
@@ -133,13 +161,13 @@ class HEIC2PNG:
             return self.input_path.with_suffix(extension)
         return None
 
-    def _prepare_image(self, extension: str) -> Image.Image:
+    def _prepare_image(self, image_format: str) -> Image.Image:
         """Return the image in a mode the target format can store, with colors reduced if asked."""
         image = self.image
-        if extension.lower() in JPEG_EXTENSIONS:
+        if image_format == 'JPEG':
             return self._flatten_for_jpeg(image)
-        if image.mode not in PNG_MODES:
-            image = image.convert('RGB')
+        if not _pillow_writes(image_format, image.mode):
+            image = image.convert('RGB')  # e.g. CMYK from a JPEG
         if self._palette_size is not None:
             image = self._reduce_colors(image, self._palette_size)
         return image
@@ -159,15 +187,14 @@ class HEIC2PNG:
             return image.quantize(colors=max_colors, method=Image.Quantize.MEDIANCUT)
         return image
 
-    def _get_save_parameters(self, extension: str) -> Dict[str, Any]:
-        """Keyword arguments for Image.save() for the given output extension."""
-        if extension.lower() in JPEG_EXTENSIONS:
-            # Pillow knows the format only as "JPEG"; "JPG" raises KeyError.
+    def _get_save_parameters(self, image_format: str) -> Dict[str, Any]:
+        """Keyword arguments for Image.save() for the given Pillow format name."""
+        if image_format == 'JPEG':
             quality = self.quality if self.quality is not None else DEFAULT_JPEG_QUALITY
-            return {'format': 'JPEG', 'quality': quality, 'optimize': True}
+            return {'format': image_format, 'quality': quality, 'optimize': True}
         # With optimize=True Pillow always uses the strongest zlib compression,
         # so there is no compression level to pass.
-        return {'format': 'PNG', 'optimize': True}
+        return {'format': image_format, 'optimize': True}
 
     def _describe_input(self) -> str:
         """A readable name for the input, for error messages."""
@@ -180,9 +207,9 @@ class HEIC2PNG:
     def _flatten_for_jpeg(image: Image.Image) -> Image.Image:
         """
         JPEG has no alpha channel, so Pillow refuses to save RGBA/LA/P images as JPEG.
-        Composite such images onto a white background; RGB/L/CMYK pass through.
+        Composite such images onto a white background; JPEG_MODES pass through.
         """
-        if image.mode in ('RGB', 'L', 'CMYK'):
+        if image.mode in JPEG_MODES:
             return image
         rgba = image.convert('RGBA')
         background = Image.new('RGB', rgba.size, (255, 255, 255))
@@ -195,7 +222,7 @@ class HEIC2PNG:
         if not extension.startswith('.'):
             extension = f'.{extension}'
         if extension.lower() not in OUTPUT_EXTENSIONS:
-            raise ValueError(f"Unsupported output format: {extension} (use .png, .jpg or .jpeg)")
+            raise ValueError(f"Unsupported output format: {extension} (use {_join_or(OUTPUT_EXTENSIONS)})")
         return extension
 
     @staticmethod

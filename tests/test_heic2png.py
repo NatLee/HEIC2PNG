@@ -6,6 +6,7 @@ import pytest
 from PIL import Image
 
 from heic2png import HEIC2PNG
+from heic2png.heic2png import JPEG_MODES
 
 from .images import noise, transparent_noise
 
@@ -129,6 +130,40 @@ def test_unsupported_output_format(rgb_png, tmp_path, extension):
     with pytest.raises(ValueError, match="Unsupported output format"):
         HEIC2PNG(str(rgb_png)).save(tmp_path / "out", extension=extension)
     assert list(tmp_path.iterdir()) == [rgb_png]
+
+
+def test_unsupported_output_format_lists_the_formats(rgb_png, tmp_path):
+    with pytest.raises(ValueError, match=r"\(use \.png, \.jpg or \.jpeg\)$"):
+        HEIC2PNG(str(rgb_png)).save(tmp_path / "out", extension=".gif")
+
+
+def test_jpeg_modes_are_modes_pillow_writes_as_jpeg():
+    # These modes go to Pillow unchanged, so Pillow must be able to write each one as JPEG
+    for mode in JPEG_MODES:
+        Image.new(mode, (4, 4)).save(io.BytesIO(), "JPEG")
+
+
+# Every image mode Pillow can turn into RGB (only "La" cannot be converted at all)
+ALL_MODES = ["1", "L", "LA", "P", "PA", "I", "I;16", "I;16B", "I;16L", "F",
+             "RGB", "RGBA", "RGBa", "RGBX", "CMYK", "YCbCr", "LAB", "HSV"]
+
+
+@pytest.mark.parametrize("mode", ALL_MODES)
+def test_png_output_keeps_modes_png_can_store_and_turns_the_rest_into_rgb(rgb_png, tmp_path, mode):
+    # Which modes PNG can store depends on the Pillow version (Pillow 13 dropped mode I), so the
+    # expected bytes come from Pillow itself: its own PNG of the image, or of the RGB version.
+    converter = HEIC2PNG(str(rgb_png))  # quality None: no color reduction
+    converter.image = Image.new(mode, (4, 4))
+
+    out = converter.save(tmp_path / "out.png")
+
+    expected = io.BytesIO()
+    try:
+        converter.image.save(expected, "PNG", optimize=True)
+    except OSError:  # PNG cannot store this mode
+        expected = io.BytesIO()
+        converter.image.convert("RGB").save(expected, "PNG", optimize=True)
+    assert out.read_bytes() == expected.getvalue()
 
 
 def test_existing_output_needs_overwrite(rgb_png, tmp_path):
