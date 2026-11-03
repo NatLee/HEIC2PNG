@@ -1,4 +1,7 @@
 """Regression tests for behaviour that broke between 1.1.x and 1.2.0."""
+import subprocess
+import sys
+
 import pytest
 from PIL import Image
 
@@ -44,6 +47,22 @@ def test_save_without_path_respects_overwrite(tmp_path):
     with pytest.raises(FileExistsError):
         HEIC2PNG(str(src)).save()
     assert HEIC2PNG(str(src), overwrite=True).save() == tmp_path / "photo.png"
+
+
+def test_import_does_not_configure_logging():
+    # 1.2.0 called logging.basicConfig() at import time, adding a handler to the caller's root logger.
+    code = "import logging, heic2png; print(len(logging.getLogger().handlers))"
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == "0"
+
+
+def test_cli_still_prints_progress(tmp_path):
+    src = tmp_path / "photo.jpg"
+    Image.new("RGB", (8, 8)).save(src)
+    out = subprocess.run([sys.executable, "-m", "heic2png.cli", "-i", str(src), "-q", "100"],
+                         capture_output=True, text=True)
+    assert out.returncode == 0
+    assert "Successfully saved converted image" in out.stderr
 
 
 def test_short_q_sets_quality():

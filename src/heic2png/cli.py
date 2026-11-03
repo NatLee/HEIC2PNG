@@ -9,11 +9,8 @@ from pillow_heif import register_heif_opener
 from heic2png import __version__
 from heic2png.heic2png import HEIC2PNG
 
-logging.basicConfig(
-    format='%(message)s',
-    level=logging.INFO,
-    stream=sys.stderr
-)
+# Logging is configured in cli(), not at import time, so `import heic2png`
+# does not change the logging setup of the program that imports it.
 logger = logging.getLogger(__name__)
 
 class CLIError(Exception):
@@ -219,6 +216,7 @@ def cli(argv: Optional[Sequence[str]] = None) -> int:
     parser = setup_parser()
     args = parser.parse_args(argv)
 
+    logging.basicConfig(format='%(message)s', level=logging.INFO, stream=sys.stderr)
     # Configure logging based on verbosity
     if args.quiet:
         logging.getLogger().setLevel(logging.WARNING)
