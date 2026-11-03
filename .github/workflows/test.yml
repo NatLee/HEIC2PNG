@@ -11,20 +11,35 @@ on:
       - master
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python: ["3.8", "3.9", "3.10", "3.11"]
+        python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
 
     steps:
-      - uses: actions/checkout@v2
-      - name: Setup Python
-        uses: actions/setup-python@v2
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - name: Install Tox and other packages
+      - name: Install tox
         run: pip install tox
-      - name: Run Tox
-        # Run tox using the version of Python in `PATH`
+      - name: Run tests
+        # Runs tox with the Python version on PATH
         run: tox -e py
+
+  package:
+    # Build the sdist and wheel the same way the release workflow does, and validate the metadata.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build and check
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          twine check dist/*
