@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import BinaryIO, NoReturn, Optional, Sequence, Union
 
 from heic2png import __version__
-from heic2png.heic2png import HEIC2PNG
+from heic2png.heic2png import (
+    DEFAULT_EXTENSION, HEIC2PNG, MAX_PALETTE_COLORS, MAX_QUALITY, MIN_QUALITY, OUTPUT_EXTENSIONS,
+    output_extension,
+)
 
 # Logging is configured in cli(), not at import time, so `import heic2png`
 # does not change the logging setup of the program that imports it.
@@ -15,18 +18,21 @@ logger = logging.getLogger(__name__)
 
 PROG = "heic2png"
 ISSUES_URL = "https://github.com/NatLee/heic2png/issues"
-EPILOG = """
+EPILOG = f"""
 Examples:
   %(prog)s -i photo.heic                    writes photo.png next to photo.heic
   %(prog)s -i photo.heic -o out.png -q 100  keeps every color
   %(prog)s -i photo.heic -f jpg             writes photo.jpg
+  %(prog)s -i photo.heic -o photo.jpg       the file name picks JPEG
   cat photo.heic | %(prog)s > photo.png     stdin to stdout, no messages
 
 Notes:
   - Without -i, the image is read from stdin.
   - Without -o, the output goes next to the input file, or to stdout when
     reading from stdin.
-  - Below quality 100, PNG output is reduced to at most 256 colors.
+  - The format comes from -f, else from the -o file name ({', '.join(OUTPUT_EXTENSIONS)}),
+    else it is {DEFAULT_EXTENSION.lstrip('.')}. A -o name of another format is refused.
+  - Below quality {MAX_QUALITY}, PNG output is reduced to at most {MAX_PALETTE_COLORS} colors.
     For JPEG output, quality is the usual JPEG quality.
   - Messages go to stderr, so stdout only ever carries image data.
 """
@@ -36,14 +42,20 @@ class CLIError(Exception):
     """An error meant for the user: cli() prints the message and exits with status 1."""
 
 
+class UsageError(CLIError):
+    """Options that cannot work together: cli() prints the usage and exits with status 2, like argparse."""
+
+
 def _quality(value: str) -> int:
-    """argparse type for --quality: a whole number from 1 to 100."""
+    """argparse type for --quality: a whole number from MIN_QUALITY to MAX_QUALITY."""
     try:
         quality = int(value)
     except ValueError:
         quality = 0
-    if not 1 <= quality <= 100:
-        raise argparse.ArgumentTypeError(f"must be a whole number from 1 to 100, got {value!r}")
+    if not MIN_QUALITY <= quality <= MAX_QUALITY:
+        raise argparse.ArgumentTypeError(
+            f"must be a whole number from {MIN_QUALITY} to {MAX_QUALITY}, got {value!r}"
+        )
     return quality
 
 
@@ -75,15 +87,14 @@ def setup_parser() -> argparse.ArgumentParser:
         type=_quality,
         default=80,
         metavar="QUALITY",
-        help="Quality of the converted image (1-100), default: 80. "
-             "Below 100, PNG output is reduced to a palette of at most 256 colors; "
-             "use 100 to keep every color.",
+        help=f"Quality of the converted image ({MIN_QUALITY}-{MAX_QUALITY}), default: %(default)s. "
+             f"Below {MAX_QUALITY}, PNG output is reduced to a palette of at most {MAX_PALETTE_COLORS} colors; "
+             f"use {MAX_QUALITY} to keep every color.",
     )
     conversion_group.add_argument(
         "-f", "--format",
-        choices=['png', 'jpg', 'jpeg'],
-        default='png',
-        help="Output format (default: png)",
+        choices=[extension.lstrip('.') for extension in OUTPUT_EXTENSIONS],
+        help=f"Output format (default: from the -o file name, else {DEFAULT_EXTENSION.lstrip('.')})",
     )
 
     behavior_group = parser.add_argument_group('Behavior Options')
@@ -121,12 +132,20 @@ def validate_args(args: argparse.Namespace) -> None:
     Check combinations argparse cannot check by itself.
 
     Raises:
-        CLIError: If the arguments cannot work together.
+        UsageError: If the arguments cannot work together.
     """
     if args.input_path is None and sys.stdin.isatty():
-        raise CLIError("No input: give a file with -i, or pipe an image into stdin (see --help)")
+        raise UsageError("No input: give a file with -i, or pipe an image into stdin (see --help)")
     if args.quiet and args.verbose:
-        raise CLIError("--quiet and --verbose cannot be used together")
+        raise UsageError("--quiet and --verbose cannot be used together")
+    try:
+        output_extension(_requested_extension(args), args.output_path)
+    except ValueError as e:  # -f and -o disagree, or -o names a format heic2png cannot write
+        raise UsageError(str(e)) from e
+
+
+def _requested_extension(args: argparse.Namespace) -> Optional[str]:
+    return f".{args.format}" if args.format else None
 
 
 def process_image(args: argparse.Namespace) -> Union[Path, BinaryIO]:
@@ -139,7 +158,7 @@ def process_image(args: argparse.Namespace) -> Union[Path, BinaryIO]:
     Raises:
         CLIError: If the input cannot be read or the output cannot be written.
     """
-    extension = f".{args.format}"
+    extension = output_extension(_requested_extension(args), args.output_path)
     try:
         converter = HEIC2PNG(
             image_file_path=args.input_path if args.input_path is not None else "",
@@ -148,7 +167,7 @@ def process_image(args: argparse.Namespace) -> Union[Path, BinaryIO]:
         )
         logger.info("Converting image...")
         if args.verbose:
-            _log_settings(args, converter._output_path(args.output_path, extension))
+            _log_settings(args, converter._output_path(args.output_path, extension), extension)
         result = converter.save(args.output_path, extension=extension)
     except FileExistsError as e:
         raise CLIError(f"{e}. Use -w/--overwrite to replace it.") from e
@@ -168,13 +187,18 @@ def cli(argv: Optional[Sequence[str]] = None) -> int:
         argv: Command line arguments (defaults to sys.argv[1:]).
 
     Returns:
-        The exit status: 0 on success, 1 on error, 130 when interrupted.
+        The exit status: 0 on success, 1 on error, 130 when interrupted. Usage errors
+        exit with status 2 through argparse (SystemExit), as invalid options do.
     """
-    args = setup_parser().parse_args(argv)
+    parser = setup_parser()
+    args = parser.parse_args(argv)
+    try:
+        validate_args(args)
+    except UsageError as e:
+        parser.error(str(e))
     _configure_logging(quiet=args.quiet or is_stream_mode(args))
 
     try:
-        validate_args(args)
         process_image(args)
         return 0
     except CLIError as e:
@@ -209,12 +233,12 @@ def _configure_logging(quiet: bool) -> None:
     logger.setLevel(logging.WARNING if quiet else logging.INFO)
 
 
-def _log_settings(args: argparse.Namespace, output_path: Optional[Path]) -> None:
+def _log_settings(args: argparse.Namespace, output_path: Optional[Path], extension: str) -> None:
     logger.info("Conversion settings:")
     logger.info(f"Input: {args.input_path}")
     logger.info(f"Output: {output_path if output_path is not None else 'stdout'}")
     logger.info(f"Quality: {args.quality}")
-    logger.info(f"Format: {args.format}")
+    logger.info(f"Format: {extension.lstrip('.').lower()}")
     logger.info(f"Overwrite: {args.overwrite}")
 
 

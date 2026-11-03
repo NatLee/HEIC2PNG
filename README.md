@@ -69,14 +69,30 @@ usage: heic2png [-h] [-i INPUT_PATH] [-o OUTPUT_PATH] [-q QUALITY]
 | `-i`<br>`--input-path` | Image to convert: `.heic`, `.jpg`, `.jpeg` or `.png` | read stdin |
 | `-o`<br>`--output-path` | Where to write the result (stdout when reading stdin) | next to the input |
 | `-q`<br>`--quality` | Quality from 1 to 100, see [About quality](#about-quality) | `80` |
-| `-f`<br>`--format` | Output format: `png`, `jpg` or `jpeg` | `png` |
+| `-f`<br>`--format` | Output format: `png`, `jpg` or `jpeg` | from `-o`, else `png` |
 | `-w`<br>`--overwrite` | Replace the output file if it exists | off |
 | `--quiet` | Print errors only | off |
 | `-v`<br>`--verbose` | Also print the settings used | off |
 | `-h`<br>`--version` | Print the help or the version | |
 
-`-f` decides the format, not the file name: write `-f jpg -o photo.jpg`, because
-`-o photo.jpg` alone still writes PNG data.
+### Which format you get
+
+One rule decides the output format: `-f` if you give it, otherwise the extension of the
+`-o` file name, otherwise PNG. The output is never HEIC, and a file name never claims another
+format than what is inside.
+
+| `-f` | `-o` | Output |
+|---|---|---|
+| | | PNG next to the input (`photo.png`), or on stdout |
+| | `out.png`, `out.jpg`, `out.jpeg` | the format the name says |
+| | `out` (no extension) | PNG |
+| `jpg` | | JPEG next to the input (`photo.jpg`), or on stdout |
+| `jpg` | `out.jpeg` or `out` | JPEG |
+| `png` | `out.jpg` | error: the name says JPEG |
+| any | `out.heic`, `out.webp`, `out.txt`, … | error: heic2png writes PNG or JPEG |
+
+Errors here are usage errors (exit status 2), and nothing is written. Version 1.2.2 and
+earlier wrote PNG data into `-o photo.jpg`; now that gives a real JPEG.
 
 ```bash
 heic2png -i photo.heic -o out.png                   # pick the output path
@@ -126,7 +142,7 @@ from heic2png import HEIC2PNG
 converter = HEIC2PNG("photo.heic", quality=100)
 converter.save()                                 # photo.png next to the input
 converter.save("copy.png")                       # a path of your choice
-converter.save("photo.jpg", extension=".jpg")    # JPEG
+converter.save("photo.jpg")                      # JPEG: the name decides
 ```
 
 `HEIC2PNG(image_file_path="", quality=None, overwrite=False)` opens the image.
@@ -140,14 +156,17 @@ converter.save("photo.jpg", extension=".jpg")    # JPEG
 - Raises `FileNotFoundError` for a missing file, `ValueError` for a bad quality or file type,
   and `OSError` if the data is not an image it can read.
 
-`save(output_image_file_path=None, extension=".png")` converts and writes the image, and
+`save(output_image_file_path=None, extension=None)` converts and writes the image, and
 returns the path it wrote.
 
 - `output_image_file_path`: where to write. If left out, the result goes next to the input
   file with the new extension, or to stdout when the input was stdin or a file object.
-- `extension`: `".png"`, `".jpg"` or `".jpeg"` (the dot is optional).
+- `extension`: `".png"`, `".jpg"` or `".jpeg"` (the dot is optional). Left out, the format
+  follows the file name, and PNG when it has no extension: the same rule as the command,
+  see [Which format you get](#which-format-you-get).
 - Raises `FileExistsError` if the file exists and `overwrite` is off, `ValueError` for an
-  unsupported format, and `OSError` if writing fails.
+  unsupported format or a file name of another format (such as `photo.heic`), and `OSError`
+  if writing fails.
 
 The opened Pillow image is available as `converter.image` if you need it.
 

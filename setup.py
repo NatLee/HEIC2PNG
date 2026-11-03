@@ -1,5 +1,7 @@
 import setuptools
 
+REPO_URL = 'https://github.com/NatLee/heic2png'
+
 with open('README.md', 'r', encoding='utf-8') as fh:
     long_description = fh.read()
 
@@ -11,11 +13,11 @@ setuptools.setup(
     keywords='HEIC, PNG, converter, image',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url='https://github.com/NatLee/heic2png',
+    url=REPO_URL,
     project_urls={
-        'Documentation': 'https://github.com/NatLee/heic2png',
-        'Bug Reports': 'https://github.com/NatLee/heic2png/issues',
-        'Source Code': 'https://github.com/NatLee/heic2png'
+        'Documentation': REPO_URL,
+        'Bug Reports': REPO_URL + '/issues',
+        'Source Code': REPO_URL,
     },
     package_dir={'': 'src'},
     packages=setuptools.find_packages(where='src'),

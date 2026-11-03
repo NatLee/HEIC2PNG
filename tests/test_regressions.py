@@ -8,6 +8,10 @@ from PIL import Image
 from heic2png import HEIC2PNG
 from heic2png.cli import setup_parser
 
+# JPEG is lossy, so a flat color may come back a few levels off. Pillow 10.4 and 13.0 gave the
+# colors used here back exactly; the margin is for other JPEG decoders.
+JPEG_TOLERANCE = 3
+
 
 @pytest.mark.parametrize("fmt", ["jpg", "jpeg"])
 @pytest.mark.parametrize("mode", ["RGB", "RGBA"])
@@ -24,7 +28,7 @@ def test_jpeg_output(tmp_path, fmt, mode):
         assert result.format == "JPEG"
         assert result.mode == "RGB"
         if mode == "RGBA":  # transparent pixels become white, not black
-            assert result.getpixel((4, 4)) == pytest.approx((255, 255, 255), abs=3)
+            assert result.getpixel((4, 4)) == pytest.approx((255, 255, 255), abs=JPEG_TOLERANCE)
 
 
 @pytest.mark.parametrize("quality", [None, 30, 80, 100])
@@ -40,7 +44,7 @@ def test_grayscale_with_alpha_converts_to_png(tmp_path, quality):
     with Image.open(out) as result:
         rgba = result.convert("RGBA")
     assert rgba.getpixel((2, 8))[3] == 0
-    assert rgba.getpixel((12, 8)) == pytest.approx((128, 128, 128, 255), abs=3)
+    assert rgba.getpixel((12, 8)) == (128, 128, 128, 255)  # PNG is lossless
 
 
 @pytest.mark.parametrize("quality", [None, 80])
@@ -53,7 +57,7 @@ def test_cmyk_jpeg_converts_to_png(tmp_path, quality):
 
     with Image.open(out) as result:
         assert result.format == "PNG"
-        assert result.convert("RGB").getpixel((8, 8)) == pytest.approx((255, 0, 0), abs=12)
+        assert result.convert("RGB").getpixel((8, 8)) == pytest.approx((255, 0, 0), abs=JPEG_TOLERANCE)
 
 
 def test_save_without_path_writes_next_to_input(tmp_path):

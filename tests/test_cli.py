@@ -5,6 +5,7 @@ data on stdout through capsysbinary. The tests at the end run the installed
 command on the real sample photo.
 """
 import io
+import re
 import sys
 
 import pytest
@@ -42,13 +43,22 @@ class _Terminal:
 
 def test_options_and_defaults_are_unchanged():
     parser = setup_parser()
-    options = {s for action in parser._actions for s in action.option_strings}
+    # Every option the help mentions; the help is public, unlike the parser's list of actions
+    options = set(re.findall(r"(?<![\w-])--?[a-z][a-z-]*", parser.format_help()))
     assert options == {
         "-h", "--help", "-i", "--input-path", "-o", "--output-path", "-q", "--quality",
         "-f", "--format", "-w", "--overwrite", "--quiet", "-v", "--verbose", "--version",
     }
     args = parser.parse_args([])
-    assert (args.quality, args.format, args.overwrite, args.quiet, args.verbose) == (80, "png", False, False, False)
+    # -f has no default: without it the -o file name decides the format, and PNG otherwise
+    assert (args.quality, args.format, args.overwrite, args.quiet, args.verbose) == (80, None, False, False, False)
+
+
+def test_usage_line_matches_the_readme():
+    # The README quotes this line; -f's choices come from the converter's output formats
+    usage = " ".join(setup_parser().format_usage().split())
+    assert usage == "usage: heic2png [-h] [-i INPUT_PATH] [-o OUTPUT_PATH] [-q QUALITY] " \
+                    "[-f {png,jpg,jpeg}] [-w] [--quiet] [-v] [--version]"
 
 
 def test_help_describes_where_the_output_goes():
@@ -91,6 +101,13 @@ def test_converts_next_to_the_input(photo, caplog):
     (["-o", "out.png", "-q", "100"], "out.png", "PNG", "RGB"),
     (["-f", "jpg"], "photo.jpg", "JPEG", "RGB"),
     (["-f", "jpeg", "-o", "out.jpeg"], "out.jpeg", "JPEG", "RGB"),
+    # Without -f, the -o file name decides; a name without extension gets PNG
+    (["-o", "out.jpg"], "out.jpg", "JPEG", "RGB"),
+    (["-o", "OUT.JPEG", "-q", "90"], "OUT.JPEG", "JPEG", "RGB"),
+    (["-o", "out", "-q", "100"], "out", "PNG", "RGB"),
+    # -f with a name of the same format, or without extension
+    (["-f", "jpg", "-o", "out.jpeg"], "out.jpeg", "JPEG", "RGB"),
+    (["-f", "jpg", "-o", "out"], "out", "JPEG", "RGB"),
 ])
 def test_output_path_quality_and_format(photo, tmp_path, monkeypatch, args, name, image_format, mode):
     monkeypatch.chdir(tmp_path)
@@ -99,6 +116,34 @@ def test_output_path_quality_and_format(photo, tmp_path, monkeypatch, args, name
 
     with Image.open(tmp_path / name) as img:
         assert (img.format, img.mode) == (image_format, mode)
+
+
+@pytest.mark.parametrize("args, message", [
+    (["-o", "out.heic"], "Cannot write .heic files"),
+    (["-o", "out.heif", "-f", "png"], "Cannot write .heif files"),
+    (["-o", "out.webp"], "Cannot write .webp files"),
+    (["-f", "png", "-o", "out.jpg"], "out.jpg is a JPEG file name, but the output format asked for is PNG"),
+    (["-f", "jpg", "-o", "out.png"], "out.png is a PNG file name, but the output format asked for is JPEG"),
+])
+def test_output_names_that_do_not_match_are_usage_errors(photo, tmp_path, monkeypatch, capsys, args, message):
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli(["-i", str(photo), *args])
+
+    assert exit_info.value.code == 2
+    err = capsys.readouterr().err
+    assert err.startswith("usage: heic2png ")
+    assert f"heic2png: error: {message}" in err
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["photo.heic"]  # nothing written
+
+
+def test_stdin_with_a_format_writes_that_format_to_stdout(photo, stdin, capsysbinary):
+    stdin(photo.read_bytes())
+
+    assert cli(["-f", "jpg"]) == 0
+
+    assert capsysbinary.readouterr().out.startswith(b"\xff\xd8\xff")  # JPEG
 
 
 def test_existing_output_needs_overwrite(photo, caplog):
@@ -135,9 +180,12 @@ def test_verbose_lists_the_settings(photo, caplog):
     ]
 
 
-def test_quiet_and_verbose_cannot_be_combined(photo, caplog):
-    assert cli(["-i", str(photo), "--quiet", "--verbose"]) == 1
-    assert caplog.messages == ["heic2png: error: --quiet and --verbose cannot be used together"]
+def test_quiet_and_verbose_cannot_be_combined(photo, capsys):
+    # A usage error: exit status 2 and the usage line, like argparse's own checks
+    with pytest.raises(SystemExit) as exit_info:
+        cli(["-i", str(photo), "--quiet", "--verbose"])
+    assert exit_info.value.code == 2
+    assert "heic2png: error: --quiet and --verbose cannot be used together" in capsys.readouterr().err
 
 
 # --- errors ------------------------------------------------------------------
@@ -167,13 +215,14 @@ def test_verbose_errors_include_the_traceback(tmp_path, caplog):
     assert caplog.messages[-1].startswith("Traceback (most recent call last):")
 
 
-def test_no_input_on_a_terminal(monkeypatch, caplog):
+def test_no_input_on_a_terminal(monkeypatch, capsys):
     monkeypatch.setattr(sys, "stdin", _Terminal())
 
-    assert cli([]) == 1
-    assert caplog.messages == [
-        "heic2png: error: No input: give a file with -i, or pipe an image into stdin (see --help)"
-    ]
+    with pytest.raises(SystemExit) as exit_info:
+        cli([])
+    assert exit_info.value.code == 2
+    assert ("heic2png: error: No input: give a file with -i, or pipe an image into stdin (see --help)"
+            in capsys.readouterr().err)
 
 
 def test_ctrl_c_exits_with_130(photo, monkeypatch, caplog):
@@ -253,7 +302,7 @@ def test_file_and_stdin_give_the_same_png(heic2png, sample_heic, tmp_path):
     assert from_stdin.stderr == b""  # stream mode prints no messages
     with Image.open(tmp_path / "from_file.png") as img:  # the README's "about 200 colors" at the default
         assert img.mode == "P"
-        assert len(img.getcolors()) <= 204
+        assert len(img.getcolors()) <= 204  # int(80 x 2.56)
 
 
 def test_lower_quality_gives_a_smaller_file(heic2png, sample_heic):
