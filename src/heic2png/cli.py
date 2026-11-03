@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import BinaryIO, NoReturn, Optional, Sequence, Union
 
 from heic2png import __version__
-from heic2png.heic2png import HEIC2PNG, OUTPUT_EXTENSIONS
+from heic2png.heic2png import HEIC2PNG, MAX_PALETTE_COLORS, MAX_QUALITY, MIN_QUALITY, OUTPUT_EXTENSIONS
 
 # Logging is configured in cli(), not at import time, so `import heic2png`
 # does not change the logging setup of the program that imports it.
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 PROG = "heic2png"
 ISSUES_URL = "https://github.com/NatLee/heic2png/issues"
-EPILOG = """
+EPILOG = f"""
 Examples:
   %(prog)s -i photo.heic                    writes photo.png next to photo.heic
   %(prog)s -i photo.heic -o out.png -q 100  keeps every color
@@ -26,7 +26,7 @@ Notes:
   - Without -i, the image is read from stdin.
   - Without -o, the output goes next to the input file, or to stdout when
     reading from stdin.
-  - Below quality 100, PNG output is reduced to at most 256 colors.
+  - Below quality {MAX_QUALITY}, PNG output is reduced to at most {MAX_PALETTE_COLORS} colors.
     For JPEG output, quality is the usual JPEG quality.
   - Messages go to stderr, so stdout only ever carries image data.
 """
@@ -37,13 +37,15 @@ class CLIError(Exception):
 
 
 def _quality(value: str) -> int:
-    """argparse type for --quality: a whole number from 1 to 100."""
+    """argparse type for --quality: a whole number from MIN_QUALITY to MAX_QUALITY."""
     try:
         quality = int(value)
     except ValueError:
         quality = 0
-    if not 1 <= quality <= 100:
-        raise argparse.ArgumentTypeError(f"must be a whole number from 1 to 100, got {value!r}")
+    if not MIN_QUALITY <= quality <= MAX_QUALITY:
+        raise argparse.ArgumentTypeError(
+            f"must be a whole number from {MIN_QUALITY} to {MAX_QUALITY}, got {value!r}"
+        )
     return quality
 
 
@@ -75,9 +77,9 @@ def setup_parser() -> argparse.ArgumentParser:
         type=_quality,
         default=80,
         metavar="QUALITY",
-        help="Quality of the converted image (1-100), default: 80. "
-             "Below 100, PNG output is reduced to a palette of at most 256 colors; "
-             "use 100 to keep every color.",
+        help=f"Quality of the converted image ({MIN_QUALITY}-{MAX_QUALITY}), default: %(default)s. "
+             f"Below {MAX_QUALITY}, PNG output is reduced to a palette of at most {MAX_PALETTE_COLORS} colors; "
+             f"use {MAX_QUALITY} to keep every color.",
     )
     conversion_group.add_argument(
         "-f", "--format",

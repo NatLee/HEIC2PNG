@@ -23,6 +23,10 @@ OUTPUT_EXTENSIONS = tuple(OUTPUT_FORMATS)
 # transparency. (PNG output asks Pillow instead, see _pillow_writes.)
 JPEG_MODES = ('L', 'RGB', 'CMYK')
 DEFAULT_JPEG_QUALITY = 95
+#: Quality goes from MIN_QUALITY to MAX_QUALITY. Below MAX_QUALITY, PNG output becomes a palette of
+#: quality / MAX_QUALITY of MAX_PALETTE_COLORS colors (quality x 2.56); PNG palettes hold at most 256.
+MIN_QUALITY, MAX_QUALITY = 1, 100
+MAX_PALETTE_COLORS = 256
 
 
 @functools.lru_cache(maxsize=None)
@@ -145,9 +149,10 @@ class HEIC2PNG:
     @property
     def _palette_size(self) -> Optional[int]:
         """How many colors PNG output is reduced to, or None to keep every color (quality None or 100)."""
-        if self.quality is None or self.quality >= 100:
+        if self.quality is None or self.quality >= MAX_QUALITY:
             return None
-        return max(2, int(self.quality * 2.56))
+        # MIN_QUALITY (1) gives 2 colors, the smallest useful palette
+        return int(self.quality * (MAX_PALETTE_COLORS / MAX_QUALITY))
 
     def _output_path(
         self,
@@ -227,8 +232,8 @@ class HEIC2PNG:
 
     @staticmethod
     def _validate_quality(quality: Optional[int]) -> None:
-        if quality is not None and not 1 <= quality <= 100:
-            raise ValueError(f"Quality must be between 1 and 100, got {quality}")
+        if quality is not None and not MIN_QUALITY <= quality <= MAX_QUALITY:
+            raise ValueError(f"Quality must be between {MIN_QUALITY} and {MAX_QUALITY}, got {quality}")
 
     @staticmethod
     def _validate_input_path(path: Path) -> Path:
