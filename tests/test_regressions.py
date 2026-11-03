@@ -65,6 +65,20 @@ def test_cli_still_prints_progress(tmp_path):
     assert "Successfully saved converted image" in out.stderr
 
 
+def test_stdin_with_output_path_writes_the_file(tmp_path):
+    # README: `cat image.heic | heic2png -o output.png`; 1.2.0 ignored -o and wrote to stdout.
+    src = tmp_path / "photo.png"
+    Image.new("RGB", (8, 8), (10, 20, 30)).save(src)
+    out = tmp_path / "out.png"
+    with open(src, "rb") as stdin:
+        result = subprocess.run([sys.executable, "-m", "heic2png.cli", "-o", str(out), "-q", "100"],
+                                stdin=stdin, capture_output=True)
+    assert result.returncode == 0
+    assert result.stdout == b""
+    with Image.open(out) as img:
+        assert img.format == "PNG"
+
+
 def test_short_q_sets_quality():
     # 1.1.x and the README use `-q 90` for quality; 1.2.0 had turned -q into --quiet.
     args = setup_parser().parse_args(["-i", "photo.heic", "-q", "90"])
