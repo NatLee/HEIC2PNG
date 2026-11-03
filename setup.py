@@ -11,11 +11,11 @@ setuptools.setup(
     keywords='HEIC, PNG, converter, image',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url='https://github.com/natlee/HEIC2PNG',
+    url='https://github.com/NatLee/heic2png',
     project_urls={
-        'Documentation': 'https://github.com/natlee/HEIC2PNG',
-        'Bug Reports': 'https://github.com/natlee/HEIC2PNG/issues',
-        'Source Code': 'https://github.com/natlee/HEIC2PNG'
+        'Documentation': 'https://github.com/NatLee/heic2png',
+        'Bug Reports': 'https://github.com/NatLee/heic2png/issues',
+        'Source Code': 'https://github.com/NatLee/heic2png'
     },
     package_dir={'': 'src'},
     packages=setuptools.find_packages(where='src'),
@@ -32,6 +32,8 @@ setuptools.setup(
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
+        'Programming Language :: Python :: 3.14',
         'Programming Language :: Python :: 3 :: Only',
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
@@ -40,11 +42,10 @@ setuptools.setup(
     install_requires=[
         'pillow',
         'pillow-heif',
-        'numpy'
     ],
     extras_require={
         'dev': ['check-manifest'],
-        # 'test': ['coverage'],
+        'test': ['pytest', 'numpy'],
     },
     entry_points={
         'console_scripts': [

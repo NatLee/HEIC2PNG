@@ -9,11 +9,8 @@ from pillow_heif import register_heif_opener
 from heic2png import __version__
 from heic2png.heic2png import HEIC2PNG
 
-logging.basicConfig(
-    format='%(message)s',
-    level=logging.INFO,
-    stream=sys.stderr
-)
+# Logging is configured in cli(), not at import time, so `import heic2png`
+# does not change the logging setup of the program that imports it.
 logger = logging.getLogger(__name__)
 
 class CLIError(Exception):
@@ -58,9 +55,11 @@ Notes:
     
     conversion_group = parser.add_argument_group('Conversion Options')
     conversion_group.add_argument(
-        "--quality",
+        "-q", "--quality",
         type=int,
-        help="Quality of the converted image (1-100), default: 80",
+        help="Quality of the converted image (1-100), default: 80. "
+             "Below 100, PNG output is reduced to a palette of at most 256 colors; "
+             "use 100 to keep every color.",
         metavar="QUALITY",
         choices=range(1, 101),
         default=80,
@@ -79,7 +78,7 @@ Notes:
         help="Overwrite existing output file"
     )
     behavior_group.add_argument(
-        "-q", "--quiet",
+        "--quiet",
         action="store_true",
         help="Suppress non-error messages"
     )
@@ -155,17 +154,16 @@ def process_image(args: argparse.Namespace) -> Optional[Path]:
         # Determine if we're in stream mode
         stream_mode = is_stream_mode(args)
         
-        # Handle output path logic
-        if stream_mode:
-            # Stream mode: no input file, output to stdout
+        # Handle output path logic: -o always wins, also when reading from stdin
+        if args.output_path is not None:
+            output_path = args.output_path
+        elif stream_mode:
+            # Stream mode without -o: output to stdout
             output_path = None
-        elif args.output_path is None:
+        else:
             # Regular mode with input file but no output file: generate default name
             input_file = Path(args.input_path)
             output_path = input_file.with_suffix(f".{args.format}")
-        else:
-            # Regular mode with both input and output files
-            output_path = args.output_path
         
         # Only show info messages if not in stream mode
         if not stream_mode and not args.quiet:  
@@ -217,6 +215,7 @@ def cli(argv: Optional[Sequence[str]] = None) -> int:
     parser = setup_parser()
     args = parser.parse_args(argv)
 
+    logging.basicConfig(format='%(message)s', level=logging.INFO, stream=sys.stderr)
     # Configure logging based on verbosity
     if args.quiet:
         logging.getLogger().setLevel(logging.WARNING)
@@ -238,7 +237,7 @@ def cli(argv: Optional[Sequence[str]] = None) -> int:
         if args.verbose:
             import traceback
             logger.error(traceback.format_exc())
-        logger.error("Please report this issue: https://github.com/NatLee/HEIC2PNG/issues")
+        logger.error("Please report this issue: https://github.com/NatLee/heic2png/issues")
         return 1
 
 def main() -> NoReturn:
