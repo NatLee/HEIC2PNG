@@ -1,4 +1,9 @@
-# heic2png
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/NatLee/heic2png/main/docs/images/hero-dark.webp">
+    <img src="https://raw.githubusercontent.com/NatLee/heic2png/main/docs/images/hero-light.webp" alt="heic2png: an iPhone HEIC photo goes in; heic2png -i photo.heic, HEIC2PNG('photo.heic').save() in Python, or a shell pipe converts it; out comes photo.png with every color kept (-q 100) or a smaller photo.jpg (-f jpg)">
+  </picture>
+</p>
 
 [![Test](https://github.com/NatLee/heic2png/actions/workflows/test.yml/badge.svg)](https://github.com/NatLee/heic2png/actions/workflows/test.yml)
 [![PyPI](https://img.shields.io/pypi/v/HEIC2PNG)](https://pypi.org/project/HEIC2PNG/)
