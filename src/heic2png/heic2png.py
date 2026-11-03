@@ -13,6 +13,8 @@ ImageDestination = Union[Path, BinaryIO]
 
 JPEG_EXTENSIONS = ('.jpg', '.jpeg')
 OUTPUT_EXTENSIONS = ('.png',) + JPEG_EXTENSIONS
+# Modes Pillow can write as PNG; anything else (e.g. CMYK from a JPEG) is converted to RGB first.
+PNG_MODES = ('1', 'L', 'LA', 'I', 'I;16', 'I;16B', 'P', 'RGB', 'RGBA')
 DEFAULT_JPEG_QUALITY = 95
 
 
@@ -132,10 +134,12 @@ class HEIC2PNG:
         return None
 
     def _prepare_image(self, extension: str) -> Image.Image:
-        """Return the image ready for the target format, with colors reduced if asked."""
+        """Return the image in a mode the target format can store, with colors reduced if asked."""
         image = self.image
         if extension.lower() in JPEG_EXTENSIONS:
             return self._flatten_for_jpeg(image)
+        if image.mode not in PNG_MODES:
+            image = image.convert('RGB')
         if self._palette_size is not None:
             image = self._reduce_colors(image, self._palette_size)
         return image
@@ -143,7 +147,9 @@ class HEIC2PNG:
     @staticmethod
     def _reduce_colors(image: Image.Image, max_colors: int) -> Image.Image:
         """Quantize to at most max_colors colors, keeping transparency."""
-        if image.mode in ('RGBA', 'LA'):
+        if image.mode == 'LA':
+            image = image.convert('RGBA')  # Pillow cannot quantize LA directly
+        if image.mode == 'RGBA':
             # Fast octree is the method Pillow supports for images with an alpha channel.
             return image.quantize(colors=max_colors, method=Image.Quantize.FASTOCTREE)
         if image.mode == 'RGB':

@@ -1,4 +1,4 @@
-"""Regression tests for behaviour that broke between 1.1.x and 1.2.0."""
+"""Regression tests: each one pins a bug that was fixed (most broke between 1.1.x and 1.2.0)."""
 import subprocess
 import sys
 
@@ -25,6 +25,35 @@ def test_jpeg_output(tmp_path, fmt, mode):
         assert result.mode == "RGB"
         if mode == "RGBA":  # transparent pixels become white, not black
             assert result.getpixel((4, 4)) == pytest.approx((255, 255, 255), abs=3)
+
+
+@pytest.mark.parametrize("quality", [None, 30, 80, 100])
+def test_grayscale_with_alpha_converts_to_png(tmp_path, quality):
+    # Pillow cannot quantize LA images, so every quality below 100 failed with "image has wrong mode".
+    src = tmp_path / "gray-alpha.png"
+    img = Image.new("LA", (16, 16), (128, 255))
+    img.paste((40, 0), (0, 0, 8, 16))  # left half fully transparent
+    img.save(src)
+
+    out = HEIC2PNG(str(src), quality=quality).save(tmp_path / "out.png")
+
+    with Image.open(out) as result:
+        rgba = result.convert("RGBA")
+    assert rgba.getpixel((2, 8))[3] == 0
+    assert rgba.getpixel((12, 8)) == pytest.approx((128, 128, 128, 255), abs=3)
+
+
+@pytest.mark.parametrize("quality", [None, 80])
+def test_cmyk_jpeg_converts_to_png(tmp_path, quality):
+    # PNG has no CMYK mode, so CMYK JPEGs (common from print workflows) failed at any quality.
+    src = tmp_path / "print.jpg"
+    Image.new("CMYK", (16, 16), (0, 255, 255, 0)).save(src)  # red
+
+    out = HEIC2PNG(str(src), quality=quality).save(tmp_path / "out.png")
+
+    with Image.open(out) as result:
+        assert result.format == "PNG"
+        assert result.convert("RGB").getpixel((8, 8)) == pytest.approx((255, 0, 0), abs=12)
 
 
 def test_save_without_path_writes_next_to_input(tmp_path):
