@@ -5,6 +5,7 @@ data on stdout through capsysbinary. The tests at the end run the installed
 command on the real sample photo.
 """
 import io
+import re
 import sys
 
 import pytest
@@ -42,7 +43,8 @@ class _Terminal:
 
 def test_options_and_defaults_are_unchanged():
     parser = setup_parser()
-    options = {s for action in parser._actions for s in action.option_strings}
+    # Every option the help mentions; the help is public, unlike the parser's list of actions
+    options = set(re.findall(r"(?<![\w-])--?[a-z][a-z-]*", parser.format_help()))
     assert options == {
         "-h", "--help", "-i", "--input-path", "-o", "--output-path", "-q", "--quality",
         "-f", "--format", "-w", "--overwrite", "--quiet", "-v", "--verbose", "--version",
@@ -260,7 +262,7 @@ def test_file_and_stdin_give_the_same_png(heic2png, sample_heic, tmp_path):
     assert from_stdin.stderr == b""  # stream mode prints no messages
     with Image.open(tmp_path / "from_file.png") as img:  # the README's "about 200 colors" at the default
         assert img.mode == "P"
-        assert len(img.getcolors()) <= 204
+        assert len(img.getcolors()) <= 204  # int(80 x 2.56)
 
 
 def test_lower_quality_gives_a_smaller_file(heic2png, sample_heic):

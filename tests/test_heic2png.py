@@ -219,6 +219,7 @@ def test_quality_none_and_100_keep_every_pixel(rgb_png, tmp_path, quality):
         assert result.tobytes() == original.tobytes()
 
 
+# max_colors is int(quality x 2.56), as the README says
 @pytest.mark.parametrize("quality, max_colors", [(1, 2), (50, 128), (80, 204), (99, 253)])
 def test_quality_below_100_limits_the_palette(rgb_png, tmp_path, quality, max_colors):
     out = HEIC2PNG(str(rgb_png), quality=quality).save(tmp_path / "out.png")
@@ -295,5 +296,6 @@ def test_reduced_png_keeps_alpha_values(tmp_path, image, quality, expected_alpha
     with Image.open(out) as img:
         assert img.mode in ("RGBA", "P")
         rgba = img.convert("RGBA")
+    # Exact: a few alpha levels fit easily into the palette (checked with Pillow 10.4 and 13.0)
     for y, alpha in expected_alpha.items():
-        assert rgba.getpixel((50, y))[3] == pytest.approx(alpha, abs=8)
+        assert rgba.getpixel((50, y))[3] == alpha
