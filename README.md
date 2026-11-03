@@ -223,7 +223,7 @@ cat image.heic | heic2png | convert - -resize 50% resized.png
 ## Development
 
 ```bash
-pip install -e ".[test]"   # the package plus pytest and numpy (used only by the tests)
+pip install -e ".[test]"   # the package plus pytest
 pytest tests
 tox -e py                   # what CI runs: check-manifest + tests
 ```
