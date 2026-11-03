@@ -1,16 +1,26 @@
 ﻿# HEIC2PNG
 
-[![Test](https://github.com/NatLee/HEIC2PNG/actions/workflows/test.yml/badge.svg)](https://github.com/NatLee/HEIC2PNG/actions/workflows/test.yml)
-[![Release](https://github.com/NatLee/HEIC2PNG/actions/workflows/release.yml/badge.svg)](https://github.com/NatLee/HEIC2PNG/actions/workflows/release.yml)
+[![Test](https://github.com/NatLee/heic2png/actions/workflows/test.yml/badge.svg)](https://github.com/NatLee/heic2png/actions/workflows/test.yml)
+[![Release](https://github.com/NatLee/heic2png/actions/workflows/release.yml/badge.svg)](https://github.com/NatLee/heic2png/actions/workflows/release.yml)
 
 This is a tool for converting the format of HEIC images to PNG using Python. It now supports quality adjustment and has an option to overwrite existing files, enhancing the flexibility and usability of the tool.
 
 ## Features
 
-- **HEIC to PNG conversion** with high quality output
-- **Quality control** (1-100) for file size optimization
+- **HEIC to PNG conversion**, also to JPEG with `--format jpg`
+- **Quality control** (1-100) for smaller files — see [About quality](#about-quality) for what it does to colors
 - **Pure Python implementation** using PIL (Pillow) built-in optimization
 - **Cross-platform compatibility** - works on all platforms
+
+## About quality
+
+The command line uses **quality 80 by default**. For PNG output, any quality below 100 turns the image
+into a palette image with at most 256 colors (quality × 2.56), which makes the file much smaller but
+loses color detail: a typical phone photo with ~150,000 distinct colors ends up with about 200.
+
+- To keep every color, use `--quality 100` (or `-q 100`).
+- In Python, `HEIC2PNG(path)` keeps every color by default; pass `quality=` to reduce it.
+- For JPEG output, quality is the normal JPEG quality setting.
 
 ## Installation
 
@@ -54,7 +64,10 @@ from heic2png import HEIC2PNG
 if __name__ == '__main__':
     heic_img = HEIC2PNG('test.heic', quality=90)  # Specify the quality of the converted image
     heic_img.save()  # The converted image will be saved as `test.png`
+    heic_img.save('other.jpg', extension='.jpg')  # Or choose the path and format yourself
 ```
+
+`HEIC2PNG()` without a path reads from stdin, and `save()` then writes to stdout.
 
 ### Command Line Interface
 
@@ -63,8 +76,10 @@ HEIC2PNG also provides a CLI for easy conversion of HEIC images to PNG. Here are
 Convert a HEIC image to PNG with a specified output path:
 
 ```bash
-heic2png -i test.heic -o test.png -q 90  # -q is used to specify the quality
+heic2png -i test.heic -o test.png -q 90  # -q is short for --quality
 ```
+
+Use `--quiet` to hide progress messages (it has no short form).
 
 If you want to keep the original name, use the command below. It will generate `test.png` for you:
 
@@ -72,7 +87,7 @@ If you want to keep the original name, use the command below. It will generate `
 heic2png -i test.heic -q 90
 ```
 
-To overwrite an existing PNG file, use the `-w`` flag:
+To overwrite an existing PNG file, use the `-w` flag:
 
 ```bash
 heic2png -i test.heic -o test.png -q 90 -w
@@ -113,19 +128,22 @@ heic2png -i image.heic --verbose
 
 #### Quality Control
 ```bash
-# High quality (larger file)
+# Keep every color (no palette reduction)
+heic2png -i image.heic --quality 100 -o full_color.png
+
+# High quality palette (up to 243 colors)
 heic2png -i image.heic --quality 95 -o high_quality.png
 
 # Low quality (smaller file)
 heic2png -i image.heic --quality 30 -o compressed.png
 
-# Default quality (80)
+# Default quality (80, up to 204 colors)
 heic2png -i image.heic -o default.png
 ```
 
 #### Format Conversion
 ```bash
-# Convert to JPEG
+# Convert to JPEG (transparent areas become white, since JPEG has no transparency)
 heic2png -i image.heic --format jpg -o output.jpg
 
 # Convert to PNG (default)
@@ -198,9 +216,17 @@ cat image.heic | heic2png | convert - -resize 50% resized.png
 - **Messages**: Stream mode (no `-i` parameter) produces no processing messages
 - **Quality**: Works with all quality settings (1-100)
 - **Formats**: Supports PNG, JPG, and JPEG output formats
-- **Transparency**: Fully preserved in stream processing
+- **Transparency**: Preserved in PNG output; JPEG output puts transparent areas on white
 - **Behavior**: `heic2png -i file.heic > output.png` shows processing info (regular mode)
 - **Behavior**: `cat file.heic | heic2png > output.png` is silent (stream mode)
+
+## Development
+
+```bash
+pip install -e ".[test]"   # the package plus pytest and numpy (used only by the tests)
+pytest tests
+tox -e py                   # what CI runs: check-manifest + tests
+```
 
 ## References
 
