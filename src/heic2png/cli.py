@@ -36,6 +36,10 @@ class CLIError(Exception):
     """An error meant for the user: cli() prints the message and exits with status 1."""
 
 
+class UsageError(CLIError):
+    """Options that cannot work together: cli() prints the usage and exits with status 2, like argparse."""
+
+
 def _quality(value: str) -> int:
     """argparse type for --quality: a whole number from MIN_QUALITY to MAX_QUALITY."""
     try:
@@ -123,12 +127,12 @@ def validate_args(args: argparse.Namespace) -> None:
     Check combinations argparse cannot check by itself.
 
     Raises:
-        CLIError: If the arguments cannot work together.
+        UsageError: If the arguments cannot work together.
     """
     if args.input_path is None and sys.stdin.isatty():
-        raise CLIError("No input: give a file with -i, or pipe an image into stdin (see --help)")
+        raise UsageError("No input: give a file with -i, or pipe an image into stdin (see --help)")
     if args.quiet and args.verbose:
-        raise CLIError("--quiet and --verbose cannot be used together")
+        raise UsageError("--quiet and --verbose cannot be used together")
 
 
 def process_image(args: argparse.Namespace) -> Union[Path, BinaryIO]:
@@ -170,13 +174,18 @@ def cli(argv: Optional[Sequence[str]] = None) -> int:
         argv: Command line arguments (defaults to sys.argv[1:]).
 
     Returns:
-        The exit status: 0 on success, 1 on error, 130 when interrupted.
+        The exit status: 0 on success, 1 on error, 130 when interrupted. Usage errors
+        exit with status 2 through argparse (SystemExit), as invalid options do.
     """
-    args = setup_parser().parse_args(argv)
+    parser = setup_parser()
+    args = parser.parse_args(argv)
+    try:
+        validate_args(args)
+    except UsageError as e:
+        parser.error(str(e))
     _configure_logging(quiet=args.quiet or is_stream_mode(args))
 
     try:
-        validate_args(args)
         process_image(args)
         return 0
     except CLIError as e:

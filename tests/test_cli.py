@@ -144,9 +144,12 @@ def test_verbose_lists_the_settings(photo, caplog):
     ]
 
 
-def test_quiet_and_verbose_cannot_be_combined(photo, caplog):
-    assert cli(["-i", str(photo), "--quiet", "--verbose"]) == 1
-    assert caplog.messages == ["heic2png: error: --quiet and --verbose cannot be used together"]
+def test_quiet_and_verbose_cannot_be_combined(photo, capsys):
+    # A usage error: exit status 2 and the usage line, like argparse's own checks
+    with pytest.raises(SystemExit) as exit_info:
+        cli(["-i", str(photo), "--quiet", "--verbose"])
+    assert exit_info.value.code == 2
+    assert "heic2png: error: --quiet and --verbose cannot be used together" in capsys.readouterr().err
 
 
 # --- errors ------------------------------------------------------------------
@@ -176,13 +179,14 @@ def test_verbose_errors_include_the_traceback(tmp_path, caplog):
     assert caplog.messages[-1].startswith("Traceback (most recent call last):")
 
 
-def test_no_input_on_a_terminal(monkeypatch, caplog):
+def test_no_input_on_a_terminal(monkeypatch, capsys):
     monkeypatch.setattr(sys, "stdin", _Terminal())
 
-    assert cli([]) == 1
-    assert caplog.messages == [
-        "heic2png: error: No input: give a file with -i, or pipe an image into stdin (see --help)"
-    ]
+    with pytest.raises(SystemExit) as exit_info:
+        cli([])
+    assert exit_info.value.code == 2
+    assert ("heic2png: error: No input: give a file with -i, or pipe an image into stdin (see --help)"
+            in capsys.readouterr().err)
 
 
 def test_ctrl_c_exits_with_130(photo, monkeypatch, caplog):
